@@ -212,6 +212,10 @@ class VietnamDataFetcher:
             ("vnexpress-chungkhoan", "VnExpress Chứng Khoán"),
             ("dantri-kinhdoanh", "Dân Trí Kinh Doanh"),
             ("24hmoney", "24H Money"),
+            ("vietnamfinance", "VietnamFinance"),
+            ("vietnamfinance-taichinh", "VietnamFinance Tài Chính"),
+            ("vietnamfinance-nganhang", "VietnamFinance Ngân Hàng"),
+            ("vietnamfinance-batdongsan", "VietnamFinance Bất Động Sản"),
         ]
 
     @staticmethod
