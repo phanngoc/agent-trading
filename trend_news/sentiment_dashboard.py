@@ -61,10 +61,10 @@ st.markdown("""
 # Initialize managers
 @st.cache_resource
 def get_managers():
-    db_path = os.path.join(os.path.dirname(__file__), "..", "..", "output", "trend_news.db")
-    learning_manager = SentimentLearningManager(db_path)
+    # Use default path (output/trend_news.db) - will be auto-detected
+    learning_manager = SentimentLearningManager()
     lexicon_manager = DynamicLexiconManager(learning_manager)
-    keyword_extractor = KeywordExtractor(db_path)
+    keyword_extractor = KeywordExtractor()
     return learning_manager, lexicon_manager, keyword_extractor
 
 learning_mgr, lexicon_mgr, extractor = get_managers()

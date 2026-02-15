@@ -3,10 +3,11 @@ Keyword Extractor - Tự động phát hiện từ khóa mới từ database
 
 Phân tích patterns trong news titles để tìm từ khóa có tiềm năng
 """
+import os
 import sqlite3
 import re
 from collections import Counter, defaultdict
-from typing import Dict, List, Tuple, Set
+from typing import Dict, List, Tuple, Set, Optional
 from datetime import datetime, timedelta
 import json
 
@@ -14,7 +15,11 @@ import json
 class KeywordExtractor:
     """Trích xuất và phân tích từ khóa từ news database"""
     
-    def __init__(self, db_path: str = "trend_news.db"):
+    def __init__(self, db_path: Optional[str] = None):
+        if db_path is None:
+            # Default to output/trend_news.db relative to project root
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            db_path = os.path.join(project_root, "output", "trend_news.db")
         self.db_path = db_path
         
         # Stop words tiếng Việt

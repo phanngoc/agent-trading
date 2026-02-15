@@ -1,8 +1,9 @@
-"""
+"""  
 Dynamic Sentiment Learning System
 
 Hệ thống học sentiment từ feedback người dùng và tự động cải thiện lexicon.
 """
+import os
 import sqlite3
 import json
 from datetime import datetime
@@ -14,7 +15,11 @@ import re
 class SentimentLearningManager:
     """Quản lý việc học và cải thiện sentiment lexicon từ feedback"""
     
-    def __init__(self, db_path: str = "trend_news.db"):
+    def __init__(self, db_path: Optional[str] = None):
+        if db_path is None:
+            # Default to output/trend_news.db relative to project root
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            db_path = os.path.join(project_root, "output", "trend_news.db")
         self.db_path = db_path
         self._init_learning_tables()
     
