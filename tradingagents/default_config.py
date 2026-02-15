@@ -25,10 +25,14 @@ DEFAULT_CONFIG = {
         "core_stock_apis": "yfinance",       # Options: alpha_vantage, yfinance
         "technical_indicators": "yfinance",  # Options: alpha_vantage, yfinance
         "fundamental_data": "yfinance",      # Options: alpha_vantage, yfinance
-        "news_data": "yfinance",             # Options: alpha_vantage, yfinance
+        "news_data": "trend_news",           # Options: alpha_vantage, yfinance, trend_news
     },
     # Tool-level configuration (takes precedence over category-level)
     "tool_vendors": {
         # Example: "get_stock_data": "alpha_vantage",  # Override category default
     },
+    # trend_news API configuration (for Vietnamese market news)
+    "trend_news_api_url": "http://localhost:8000",
+    # Optional: List of Vietnamese sources to filter
+    "trend_news_sources": [],  # Empty = all sources; or ["vnexpress_kinhdoanh", "cafef_chungkhoan"]
 }

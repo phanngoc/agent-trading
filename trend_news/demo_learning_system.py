@@ -22,13 +22,12 @@ print("="*60)
 print("🎯 SENTIMENT LEARNING SYSTEM - DEMO")
 print("="*60)
 
-# Initialize
-db_path = os.path.join("output", "trend_news.db")
-print(f"\n📁 Database: {db_path}")
-
-learning_mgr = SentimentLearningManager(db_path)
+# Initialize (will use default output/trend_news.db path)
+learning_mgr = SentimentLearningManager()
 lexicon_mgr = DynamicLexiconManager(learning_mgr)
-extractor = KeywordExtractor(db_path)
+extractor = KeywordExtractor()
+
+print(f"\n📁 Database: {learning_mgr.db_path}")
 
 print("✅ Managers initialized")
 

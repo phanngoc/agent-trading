@@ -22,11 +22,10 @@ fi
 echo "🗄️  Initializing learning database tables..."
 python3 -c "
 from src.core.sentiment_learning import SentimentLearningManager
-import os
 
-db_path = os.path.join('output', 'trend_news.db')
-manager = SentimentLearningManager(db_path)
-print('✅ Database initialized!')
+# Use default path (output/trend_news.db)
+manager = SentimentLearningManager()
+print(f'✅ Database initialized at: {manager.db_path}')
 "
 
 echo ""
