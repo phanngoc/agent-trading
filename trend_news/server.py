@@ -36,6 +36,7 @@ class NewsItem(BaseModel):
     topics: List[str] = []
     overall_sentiment_score: float = 0.0
     overall_sentiment_label: str = "Neutral"
+    relevance_score: int = 1
 
 
 class NewsSentimentResponse(BaseModel):
@@ -103,15 +104,10 @@ def get_news_sentiment(
              except ValueError:
                 pass
 
-    # Map tickers to source_id if applicable, or just leave as None for now
-    # Since we store 'source_id' not tickers, this is a distinct mapping difference.
-    # For now, let's allow 'tickers' to query specific source_ids if they match.
-    source_filter = tickers
-
     raw_news = db_manager.get_filtered_news(
         start_date=start_date_iso,
         end_date=end_date_iso,
-        source_id=source_filter,
+        tickers=tickers,   # searched against news titles via alias mapping
         limit=limit
     )
 
@@ -128,13 +124,14 @@ def get_news_sentiment(
         news_item = NewsItem(
             title=title,
             url=item.get("url", ""),
-            time_published=item.get("crawled_at", "").replace("-", "").replace(":", ""), # Convert back to compact format if needed or keep ISO
+            time_published=item.get("crawled_at", "").replace("-", "").replace(":", ""),
             source=source_id,
-            source_domain=source_id, # Placeholder
-            summary=f"Ranked: {item.get('ranks', '')}", # Use ranks as summary for now
+            source_domain=source_id,
+            summary=f"Ranked: {item.get('ranks', '')}",
             topics=[topics] if topics else [],
             overall_sentiment_score=sentiment_score,
-            overall_sentiment_label=sentiment_label
+            overall_sentiment_label=sentiment_label,
+            relevance_score=item.get("relevance_score", 1),
         )
         feed_items.append(news_item)
 
@@ -148,12 +145,22 @@ def get_native_news(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     source: Optional[str] = None,
+    tickers: Optional[str] = Query(None, description="Comma-separated ticker(s) to search in news titles, e.g. 'VIC' or 'VIC,HPG'"),
     limit: int = 50
 ):
     """
     Native API endpoint for getting news from database.
+
+    - **source**: filter by exact scraper source_id (e.g. 'cafef', '24hmoney')
+    - **tickers**: search news titles by stock ticker aliases (e.g. 'VIC' → searches 'Vingroup', 'VIN', ...)
     """
-    return db_manager.get_filtered_news(start_date, end_date, source, limit)
+    return db_manager.get_filtered_news(
+        start_date=start_date,
+        end_date=end_date,
+        source_id=source,
+        tickers=tickers,
+        limit=limit,
+    )
 
 
 # ============================================================================
