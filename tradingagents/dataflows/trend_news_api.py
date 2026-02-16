@@ -8,24 +8,45 @@ from typing import Optional
 from .config import get_config
 
 
-# Vietnamese stock ticker to company name/search terms mapping
-VIETNAMESE_TICKER_MAP = {
-    "VIC.VN": ["Vingroup", "Vinhomes", "VIC"],
-    "VNM.VN": ["Vinamilk", "VNM"],
-    "VCB.VN": ["Vietcombank", "VCB"],
-    "VHM.VN": ["Vinhomes", "VHM"],
-    "VPB.VN": ["VPBank", "VPB"],
-    "MSN.VN": ["Masan", "MSN"],
-    "HPG.VN": ["Hòa Phát", "Hoa Phat", "HPG"],
-    "TCB.VN": ["Techcombank", "TCB"],
-    "VRE.VN": ["Vincom Retail", "VRE"],
-    "GAS.VN": ["PV Gas", "GAS"],
-    "SAB.VN": ["Sabeco", "SAB"],
-    "POW.VN": ["PetroVietnam Power", "POW"],
-    "PLX.VN": ["Petrolimex", "PLX"],
-    "MWG.VN": ["Mobile World", "Thế Giới Di Động", "MWG"],
-    "FPT.VN": ["FPT", "FPT Corporation"],
-}
+# ---------------------------------------------------------------------------
+# Vietnamese ticker map — built dynamically from ticker_mapper module.
+# Supports both 'VIC.VN' and bare 'VIC' lookups.
+# ---------------------------------------------------------------------------
+
+def _build_vn_ticker_map() -> dict:
+    """
+    Build VIETNAMESE_TICKER_MAP by importing from trend_news ticker_mapper.
+    Returns a dict of {TICKER.VN: [aliases...]} for all supported tickers.
+    Falls back to a minimal static map if the import fails.
+    """
+    import os, sys
+    _root = os.path.normpath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "trend_news")
+    )
+    if _root not in sys.path:
+        sys.path.insert(0, _root)
+    try:
+        from src.core.ticker_mapper import TICKER_ALIASES
+        result = {}
+        for ticker, aliases in TICKER_ALIASES.items():
+            # Register both 'VIC.VN' and bare 'VIC' keys
+            if not ticker.isupper() or len(ticker) > 6:
+                continue  # skip sector keys
+            result[f"{ticker}.VN"] = aliases
+            result[ticker] = aliases
+        return result
+    except ImportError:
+        # Minimal fallback
+        return {
+            "VIC.VN": ["Vingroup", "VIC"], "VIC": ["Vingroup", "VIC"],
+            "HPG.VN": ["Hòa Phát", "HPG"], "HPG": ["Hòa Phát", "HPG"],
+            "VNM.VN": ["Vinamilk", "VNM"], "VNM": ["Vinamilk", "VNM"],
+            "VCB.VN": ["Vietcombank", "VCB"], "VCB": ["Vietcombank", "VCB"],
+            "MWG.VN": ["Thế Giới Di Động", "MWG"], "MWG": ["Thế Giới Di Động", "MWG"],
+            "FPT.VN": ["FPT", "FPT Corporation"], "FPT": ["FPT", "FPT Corporation"],
+        }
+
+VIETNAMESE_TICKER_MAP = _build_vn_ticker_map()
 
 # Default API URL (can be overridden by config)
 DEFAULT_API_URL = "http://localhost:8000"
@@ -78,25 +99,27 @@ def _parse_trend_api_time(time_str: str) -> str:
 
 def _get_search_terms_for_ticker(ticker: str) -> Optional[str]:
     """
-    Get search terms for a Vietnamese ticker.
-    
+    Return the primary company name for a Vietnamese ticker (used in HTTP API calls).
+
+    Strips exchange suffixes (.VN, .HNX) before lookup.
+
     Args:
-        ticker: Stock ticker (e.g., "VIC.VN")
-        
+        ticker: Stock ticker (e.g. 'VIC', 'VIC.VN')
+
     Returns:
-        Company name or None if not found
+        Primary company name string, or None if not found
     """
     ticker_upper = ticker.upper()
-    if ticker_upper in VIETNAMESE_TICKER_MAP:
-        # Return first search term (primary company name)
-        return VIETNAMESE_TICKER_MAP[ticker_upper][0]
-    
-    # Try without .VN suffix
-    ticker_base = ticker_upper.replace(".VN", "")
-    for key, terms in VIETNAMESE_TICKER_MAP.items():
-        if ticker_base in key:
-            return terms[0]
-    
+    aliases = VIETNAMESE_TICKER_MAP.get(ticker_upper)
+    if aliases:
+        return aliases[0]
+
+    # Try bare ticker without suffix
+    ticker_base = ticker_upper.split(".")[0]
+    aliases = VIETNAMESE_TICKER_MAP.get(ticker_base)
+    if aliases:
+        return aliases[0]
+
     return None
 
 
