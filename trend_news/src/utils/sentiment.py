@@ -317,7 +317,65 @@ def _score_to_label(compound: float) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Learned-lexicon cache (5 min TTL)
+# Auto-learned lexicon from keyword_suggestions cache (5 min TTL)
+# ---------------------------------------------------------------------------
+_auto_learned_cache: Optional[Tuple[List[Tuple[str, float]], List[Tuple[str, float]]]] = None
+_auto_learned_cache_ts: float = 0.0
+_AUTO_LEARNED_CACHE_TTL = 300.0  # 5 minutes
+
+
+def _get_auto_learned_lexicons() -> Tuple[List[Tuple[str, float]], List[Tuple[str, float]]]:
+    """
+    Load auto-aggregated lexicons from keyword_suggestions (no manual approval needed).
+    Returns (pos, neg) with auto-calculated weights based on frequency and consensus.
+    """
+    global _auto_learned_cache, _auto_learned_cache_ts
+    now = time.monotonic()
+    if _auto_learned_cache is not None and (now - _auto_learned_cache_ts) < _AUTO_LEARNED_CACHE_TTL:
+        return _auto_learned_cache
+
+    try:
+        from src.core.sentiment_learning import SentimentLearningManager
+        manager = SentimentLearningManager()
+        
+        # Get auto-aggregated keywords (frequency-based, no manual approval)
+        auto_keywords = manager.get_auto_aggregated_keywords(
+            min_confidence=0.3,   # Ngưỡng confidence
+            min_frequency=2,      # Xuất hiện ít nhất 2 lần
+            lookback_days=30      # Trong 30 ngày gần nhất
+        )
+        
+        pos: List[Tuple[str, float]] = []
+        neg: List[Tuple[str, float]] = []
+        
+        for term, weight in auto_keywords['positive'].items():
+            pos.append((term, weight))
+        for term, weight in auto_keywords['negative'].items():
+            neg.append((term, weight))
+        
+        # Sort by length (longest match wins)
+        pos.sort(key=lambda kv: -len(kv[0]))
+        neg.sort(key=lambda kv: -len(kv[0]))
+        
+        _auto_learned_cache = (pos, neg)
+        _auto_learned_cache_ts = now
+        return _auto_learned_cache
+    except Exception as e:
+        # Silent fail - return empty lists
+        _auto_learned_cache = ([], [])
+        _auto_learned_cache_ts = now
+        return _auto_learned_cache
+
+
+def refresh_auto_learned_cache():
+    """Force refresh auto-learned lexicon cache."""
+    global _auto_learned_cache, _auto_learned_cache_ts
+    _auto_learned_cache = None
+    _auto_learned_cache_ts = 0.0
+
+
+# ---------------------------------------------------------------------------
+# Legacy: Manual-approved lexicon cache (kept for backward compatibility)
 # ---------------------------------------------------------------------------
 _learned_cache: Optional[Tuple[List[Tuple[str, float]], List[Tuple[str, float]]]] = None
 _learned_cache_ts: float = 0.0
@@ -325,7 +383,7 @@ _LEARNED_CACHE_TTL = 300.0  # 5 minutes
 
 
 def _get_learned_lexicons() -> Tuple[List[Tuple[str, float]], List[Tuple[str, float]]]:
-    """Load dynamic learned lexicons with 5-min cache. Returns (pos, neg)."""
+    """Load manual-approved learned lexicons with 5-min cache. Returns (pos, neg)."""
     global _learned_cache, _learned_cache_ts
     now = time.monotonic()
     if _learned_cache is not None and (now - _learned_cache_ts) < _LEARNED_CACHE_TTL:
@@ -353,17 +411,17 @@ def _get_learned_lexicons() -> Tuple[List[Tuple[str, float]], List[Tuple[str, fl
 
 
 # ---------------------------------------------------------------------------
-# Vietnamese scoring — underthesea direction + lexicon score
+# Vietnamese scoring — underthesea direction + lexicon score (auto-learned)
 # ---------------------------------------------------------------------------
 def _score_vietnamese(text: str) -> float:
     """
     Kết hợp underthesea (direction) và lexicon score.
-    Fallback về lexicon-only nếu underthesea không khả dụng.
+    Tự động sử dụng keywords từ keyword_suggestions (không cần manual approve).
     """
-    # Build merged lexicons (static + learned)
-    learned_pos, learned_neg = _get_learned_lexicons()
-    pos_lex = _VI_POS_LEXICON + learned_pos
-    neg_lex = _VI_NEG_LEXICON + learned_neg
+    # Build merged lexicons: static + auto-learned (from keyword_suggestions)
+    auto_pos, auto_neg = _get_auto_learned_lexicons()
+    pos_lex = _VI_POS_LEXICON + auto_pos
+    neg_lex = _VI_NEG_LEXICON + auto_neg
 
     # Pure lexicon score (direction + magnitude)
     lex_score = _lexicon_score(text, pos_lex, neg_lex)

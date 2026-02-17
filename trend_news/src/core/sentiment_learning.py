@@ -371,6 +371,224 @@ class SentimentLearningManager:
             return results
         finally:
             conn.close()
+    
+    def get_pending_suggestions_count(self) -> int:
+        """Đếm tổng số suggestions chưa review"""
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT COUNT(*) FROM keyword_suggestions WHERE reviewed = 0
+            """)
+            return cursor.fetchone()[0] or 0
+        finally:
+            conn.close()
+    
+    def get_pending_suggestions_paginated(
+        self, 
+        offset: int = 0, 
+        limit: int = 20,
+        sentiment_filter: Optional[str] = None
+    ) -> List[Dict]:
+        """
+        Lấy các suggestions chờ review có phân trang
+        
+        Args:
+            offset: Số bản ghi bỏ qua
+            limit: Số bản ghi lấy
+            sentiment_filter: 'positive', 'negative', hoặc None (tất cả)
+        """
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+            
+            if sentiment_filter:
+                cursor.execute("""
+                    SELECT id, keyword, sentiment_type, suggested_weight, 
+                           co_occurrence_count, supporting_titles
+                    FROM keyword_suggestions
+                    WHERE reviewed = 0 AND sentiment_type = ?
+                    ORDER BY co_occurrence_count DESC, id ASC
+                    LIMIT ? OFFSET ?
+                """, (sentiment_filter, limit, offset))
+            else:
+                cursor.execute("""
+                    SELECT id, keyword, sentiment_type, suggested_weight, 
+                           co_occurrence_count, supporting_titles
+                    FROM keyword_suggestions
+                    WHERE reviewed = 0
+                    ORDER BY co_occurrence_count DESC, id ASC
+                    LIMIT ? OFFSET ?
+                """, (limit, offset))
+            
+            results = []
+            for row in cursor.fetchall():
+                results.append({
+                    'id': row[0],
+                    'keyword': row[1],
+                    'sentiment_type': row[2],
+                    'suggested_weight': row[3],
+                    'frequency': row[4],
+                    'examples': json.loads(row[5]) if row[5] else []
+                })
+            return results
+        finally:
+            conn.close()
+    
+    def reject_keyword(self, suggestion_id: int) -> bool:
+        """
+        Từ chối một keyword suggestion
+        
+        Args:
+            suggestion_id: ID của suggestion trong bảng keyword_suggestions
+            
+        Returns:
+            True nếu thành công, False nếu thất bại
+        """
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE keyword_suggestions 
+                SET reviewed = 1
+                WHERE id = ?
+            """, (suggestion_id,))
+            conn.commit()
+            return cursor.rowcount > 0
+        except Exception as e:
+            print(f"Error rejecting keyword: {e}")
+            return False
+        finally:
+            conn.close()
+    
+    def reject_keyword_by_text(self, keyword: str, sentiment_type: str) -> bool:
+        """
+        Từ chối tất cả suggestions có keyword và sentiment_type cụ thể
+        
+        Args:
+            keyword: Text của keyword
+            sentiment_type: 'positive' hoặc 'negative'
+            
+        Returns:
+            True nếu thành công, False nếu thất bại
+        """
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE keyword_suggestions 
+                SET reviewed = 1
+                WHERE keyword = ? AND sentiment_type = ? AND reviewed = 0
+            """, (keyword, sentiment_type))
+            conn.commit()
+            return cursor.rowcount > 0
+        except Exception as e:
+            print(f"Error rejecting keyword: {e}")
+            return False
+        finally:
+            conn.close()
+    
+    def mark_suggestion_reviewed(self, suggestion_id: int) -> bool:
+        """Đánh dấu một suggestion đã được review"""
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE keyword_suggestions 
+                SET reviewed = 1
+                WHERE id = ?
+            """, (suggestion_id,))
+            conn.commit()
+            return cursor.rowcount > 0
+        except Exception as e:
+            print(f"Error marking suggestion as reviewed: {e}")
+            return False
+        finally:
+            conn.close()
+    
+    def get_auto_aggregated_keywords(
+        self, 
+        min_confidence: float = 0.3,
+        min_frequency: int = 2,
+        lookback_days: int = 30
+    ) -> Dict[str, Dict[str, float]]:
+        """
+        Tự động aggregate keywords từ suggestions để dùng trong sentiment scoring.
+        Không cần admin approve - tính toán dựa trên frequency và consensus.
+        
+        Args:
+            min_confidence: Ngưỡng confidence tối thiểu (0-1)
+            min_frequency: Số lần xuất hiện tối thiểu
+            lookback_days: Chỉ xét suggestions trong N ngày gần nhất
+            
+        Returns:
+            {'positive': {'keyword': weight}, 'negative': {...}}
+        """
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+            
+            # Aggregate keywords từ suggestions
+            cursor.execute("""
+                SELECT 
+                    keyword,
+                    sentiment_type,
+                    COUNT(*) as freq,
+                    AVG(suggested_weight) as avg_weight,
+                    MAX(co_occurrence_count) as max_cooccur
+                FROM keyword_suggestions
+                WHERE created_at >= datetime('now', '-' || ? || ' days')
+                GROUP BY keyword, sentiment_type
+                HAVING freq >= ?
+                ORDER BY freq DESC, avg_weight DESC
+            """, (lookback_days, min_frequency))
+            
+            results = {'positive': {}, 'negative': {}}
+            
+            for row in cursor.fetchall():
+                keyword, sentiment_type, freq, avg_weight, max_cooccur = row
+                
+                # Tính confidence dựa trên frequency và consistency
+                # Càng nhiều lần xuất hiện → confidence càng cao
+                confidence = min(1.0, freq / 10) * min(1.0, max_cooccur / 5)
+                
+                if confidence >= min_confidence:
+                    # Weight = avg_weight * confidence scaling
+                    # Nhưng cap ở 0.8 để không vượt quá static keywords
+                    weight = min(0.8, (avg_weight or 0.5) * (0.5 + confidence * 0.5))
+                    results[sentiment_type][keyword] = round(weight, 3)
+            
+            return results
+            
+        finally:
+            conn.close()
+    
+    def get_combined_auto_lexicon(
+        self,
+        static_positive: Dict[str, float],
+        static_negative: Dict[str, float],
+        min_confidence: float = 0.3,
+        min_frequency: int = 2
+    ) -> Dict[str, Dict[str, float]]:
+        """
+        Kết hợp static lexicon với auto-aggregated keywords.
+        Auto keywords sẽ override static nếu có confidence cao.
+        
+        Returns:
+            {'positive': {...}, 'negative': {...}}
+        """
+        auto_keywords = self.get_auto_aggregated_keywords(
+            min_confidence=min_confidence,
+            min_frequency=min_frequency
+        )
+        
+        # Merge: static là base, auto keywords override nếu mạnh hơn
+        combined = {
+            'positive': {**static_positive, **auto_keywords['positive']},
+            'negative': {**static_negative, **auto_keywords['negative']}
+        }
+        
+        return combined
 
 
 class DynamicLexiconManager:

@@ -49,11 +49,13 @@ class NewsSentimentResponse(BaseModel):
 from src.utils.sentiment import get_sentiment
 from src.core.sentiment_learning import SentimentLearningManager, DynamicLexiconManager
 from src.core.keyword_extractor import KeywordExtractor
+from src.core.labeling_pipeline import LabelingPipeline
 
 # Initialize learning system
 learning_manager = SentimentLearningManager(DB_PATH)
 lexicon_manager = DynamicLexiconManager(learning_manager)
 keyword_extractor = KeywordExtractor(DB_PATH)
+labeling_pipeline = LabelingPipeline(DB_PATH)
 
 @app.get("/", tags=["Root"])
 def read_root():
@@ -184,6 +186,13 @@ class KeywordApproval(BaseModel):
     weight: float
 
 
+class LabelSubmission(BaseModel):
+    queue_id: int
+    user_score: float
+    user_label: str
+    comment: Optional[str] = None
+
+
 @app.post("/api/v1/feedback", tags=["Sentiment Learning"])
 def add_sentiment_feedback(feedback: SentimentFeedback):
     """
@@ -310,6 +319,97 @@ def get_improvement_suggestions():
     try:
         suggestions = keyword_extractor.suggest_improvements()
         return suggestions
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+# ============================================================================
+# Labeling Queue Endpoints
+# ============================================================================
+
+@app.post("/api/v1/labeling/build", tags=["Labeling Queue"])
+def build_labeling_queue(
+    date: str = Query(default=datetime.now().strftime("%Y-%m-%d"), description="ISO date YYYY-MM-DD"),
+    limit: int = Query(default=25, ge=1, le=100, description="Max items to queue"),
+):
+    """Score today's articles and insert the top N most uncertain into labeling_queue."""
+    try:
+        result = labeling_pipeline.build_daily_queue(date, limit=limit)
+        return {**result, "limit": limit}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v1/labeling/queue", tags=["Labeling Queue"])
+def get_labeling_queue(
+    date: str = Query(default=datetime.now().strftime("%Y-%m-%d"), description="ISO date YYYY-MM-DD"),
+    status: Optional[str] = Query(default=None, description="Filter by status: pending|labeled|skipped"),
+):
+    """Return queue items for the given date, ordered by priority_rank."""
+    try:
+        items = labeling_pipeline.get_queue(date, status_filter=status)
+        return {"date": date, "count": len(items), "items": items}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/labeling/submit", tags=["Labeling Queue"])
+def submit_label(submission: LabelSubmission):
+    """Submit an admin label for a queue item. Feeds directly into sentiment_feedback."""
+    try:
+        feedback_id = labeling_pipeline.submit_label(
+            queue_id=submission.queue_id,
+            user_score=submission.user_score,
+            user_label=submission.user_label,
+            comment=submission.comment,
+        )
+        return {"success": True, "feedback_id": feedback_id, "queue_id": submission.queue_id}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/labeling/skip/{queue_id}", tags=["Labeling Queue"])
+def skip_queue_item(queue_id: int):
+    """Mark a queue item as skipped."""
+    try:
+        labeling_pipeline.skip_item(queue_id)
+        return {"success": True, "queue_id": queue_id, "status": "skipped"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v1/labeling/stats", tags=["Labeling Queue"])
+def get_labeling_stats(
+    date: str = Query(default=datetime.now().strftime("%Y-%m-%d"), description="ISO date YYYY-MM-DD"),
+):
+    """Return summary statistics for the labeling queue on a given date."""
+    try:
+        stats = labeling_pipeline.get_queue_stats(date)
+        return {"date": date, **stats}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v1/labeling/score", tags=["Labeling Queue"])
+def score_title(title: str = Query(..., description="Article title to score")):
+    """Debug endpoint: compute uncertainty score for a single title."""
+    try:
+        result = labeling_pipeline.score_article_uncertainty(title)
+        return {
+            "title": title,
+            "lexicon_score": result.lexicon_score,
+            "uts_label": result.uts_label,
+            "final_score": result.final_score,
+            "final_label": result.final_label,
+            "uncertainty_score": result.uncertainty_score,
+            "signal_conflict": result.signal_conflict,
+            "magnitude_uncertainty": result.magnitude_uncertainty,
+            "match_sparsity": result.match_sparsity,
+            "fasttext_label": result.fasttext_label,
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
