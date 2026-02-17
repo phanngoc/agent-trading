@@ -35,10 +35,12 @@ class DatabaseManager:
         Create or migrate the news_articles table.
 
         Migration strategy:
-        - If table doesn't exist: create with full schema including UNIQUE constraint.
-        - If table exists but is old (no crawl_date column): migrate data into new
-          schema, deduplicating in the process.
-        - If table exists with new schema: do nothing.
+        - If table doesn't exist: create with full schema including UNIQUE constraints.
+        - Phase 1: If table exists but is old (no crawl_date column): migrate data into
+          new schema, deduplicating by (source_id, title, crawl_date) in the process.
+        - Phase 2: If idx_unique_url is missing: deduplicate by URL, keeping the latest
+          crawled_at per URL, then add partial UNIQUE index on url WHERE url != ''.
+        - If table is up-to-date: ensure all indexes exist (idempotent).
         Always ensures FTS5 index is present.
         """
         # Check if table exists
@@ -50,15 +52,22 @@ class DatabaseManager:
         if not table_exists:
             self._create_fresh_table(cursor)
         else:
-            # Check if new schema is already in place (crawl_date column)
+            # Check if Phase 1 schema is already in place (crawl_date column)
             cursor.execute("PRAGMA table_info(news_articles)")
             columns = {row[1] for row in cursor.fetchall()}
 
             if "crawl_date" not in columns:
-                # Old schema detected — migrate
+                # Phase 1: Old schema — migrate to crawl_date-based dedup
                 self._migrate_to_dedup_schema(cursor)
+
+            # Phase 2: URL-based dedup migration (runs if idx_unique_url is missing)
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_unique_url'"
+            )
+            if cursor.fetchone() is None:
+                self._migrate_to_url_dedup_schema(cursor)
             else:
-                # Already migrated, ensure indexes exist
+                # Already fully migrated — ensure all indexes exist (idempotent)
                 self._create_indexes(cursor)
 
         # Always ensure FTS5 index is present (idempotent)
@@ -82,6 +91,12 @@ class DatabaseManager:
 
     def _create_indexes(self, cursor):
         """Create performance and dedup indexes."""
+        # Primary dedup: one row per URL (ignores empty URLs)
+        cursor.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_url
+            ON news_articles(url) WHERE url != ''
+        """)
+        # Fallback dedup: for articles without URL, dedup by (source, title, day)
         cursor.execute("""
             CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_news
             ON news_articles(source_id, title, crawl_date)
@@ -251,6 +266,74 @@ class DatabaseManager:
         # SQLite doesn't support RENAME INDEX, but the index works correctly
 
         print(f"✅ DB migration complete: {old_count} → {new_count} records (deduped)")
+
+    def _migrate_to_url_dedup_schema(self, cursor):
+        """
+        Phase 2 migration: deduplicate rows by URL, keeping the latest crawled_at
+        per URL, then add a partial UNIQUE index on url WHERE url != ''.
+
+        This prevents the same article from being stored again when the crawler
+        re-crawls it on a subsequent day (cross-day duplicate problem).
+
+        Articles with empty URL are unaffected and continue to be deduplicated
+        by the existing (source_id, title, crawl_date) UNIQUE index.
+        """
+        print("⚙ DB migration (Phase 2): deduplicating rows by URL...")
+
+        cursor.execute("SELECT COUNT(*) FROM news_articles")
+        old_count = cursor.fetchone()[0]
+
+        # For each URL, keep only the row with the latest crawled_at.
+        # Tiebreak by MAX(id) when crawled_at is identical.
+        # Uses ROW_NUMBER() window function (requires SQLite 3.25+).
+        cursor.execute("""
+            DELETE FROM news_articles
+            WHERE url != ''
+              AND id NOT IN (
+                  SELECT id FROM (
+                      SELECT id,
+                             ROW_NUMBER() OVER (
+                                 PARTITION BY url
+                                 ORDER BY crawled_at DESC, id DESC
+                             ) AS rn
+                      FROM news_articles
+                      WHERE url != ''
+                  ) sub
+                  WHERE rn = 1
+              )
+        """)
+
+        cursor.execute("SELECT COUNT(*) FROM news_articles")
+        new_count = cursor.fetchone()[0]
+        removed = old_count - new_count
+
+        # Partial UNIQUE index: one row per non-empty URL
+        cursor.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_url
+            ON news_articles(url) WHERE url != ''
+        """)
+        # Ensure all other indexes exist (idempotent)
+        cursor.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_news
+            ON news_articles(source_id, title, crawl_date)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_news_crawled_at
+            ON news_articles(crawled_at)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_news_source
+            ON news_articles(source_id)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_news_crawl_date
+            ON news_articles(crawl_date)
+        """)
+
+        print(
+            f"✅ URL dedup migration complete: {old_count} → {new_count} records "
+            f"({removed} cross-day duplicates removed)"
+        )
 
     def save_news(self, results: Dict, id_to_name: Dict) -> int:
         """
