@@ -374,41 +374,6 @@ def refresh_auto_learned_cache():
     _auto_learned_cache_ts = 0.0
 
 
-# ---------------------------------------------------------------------------
-# Legacy: Manual-approved lexicon cache (kept for backward compatibility)
-# ---------------------------------------------------------------------------
-_learned_cache: Optional[Tuple[List[Tuple[str, float]], List[Tuple[str, float]]]] = None
-_learned_cache_ts: float = 0.0
-_LEARNED_CACHE_TTL = 300.0  # 5 minutes
-
-
-def _get_learned_lexicons() -> Tuple[List[Tuple[str, float]], List[Tuple[str, float]]]:
-    """Load manual-approved learned lexicons with 5-min cache. Returns (pos, neg)."""
-    global _learned_cache, _learned_cache_ts
-    now = time.monotonic()
-    if _learned_cache is not None and (now - _learned_cache_ts) < _LEARNED_CACHE_TTL:
-        return _learned_cache
-
-    try:
-        from src.core.sentiment_learning import DynamicLexiconManager, SentimentLearningManager
-        combined = DynamicLexiconManager(SentimentLearningManager()).get_combined_lexicon()
-        pos: List[Tuple[str, float]] = []
-        neg: List[Tuple[str, float]] = []
-        for term, weight in combined.items():
-            if weight > 0:
-                pos.append((term, weight))
-            elif weight < 0:
-                neg.append((term, abs(weight)))
-        pos.sort(key=lambda kv: -len(kv[0]))
-        neg.sort(key=lambda kv: -len(kv[0]))
-        _learned_cache = (pos, neg)
-        _learned_cache_ts = now
-        return _learned_cache
-    except Exception:
-        _learned_cache = ([], [])
-        _learned_cache_ts = now
-        return _learned_cache
-
 
 # ---------------------------------------------------------------------------
 # Vietnamese scoring — underthesea direction + lexicon score (auto-learned)

@@ -47,13 +47,12 @@ class NewsSentimentResponse(BaseModel):
 
 
 from src.utils.sentiment import get_sentiment
-from src.core.sentiment_learning import SentimentLearningManager, DynamicLexiconManager
+from src.core.sentiment_learning import SentimentLearningManager
 from src.core.keyword_extractor import KeywordExtractor
 from src.core.labeling_pipeline import LabelingPipeline
 
 # Initialize learning system
 learning_manager = SentimentLearningManager(DB_PATH)
-lexicon_manager = DynamicLexiconManager(learning_manager)
 keyword_extractor = KeywordExtractor(DB_PATH)
 labeling_pipeline = LabelingPipeline(DB_PATH)
 
@@ -119,9 +118,15 @@ def get_news_sentiment(
         source_id = item.get("source_id", "Unknown")
         title = item.get("title", "")
         
-        # Calculate sentiment on the fly (Level 2 Solution)
-        # In a production environment, this should be pre-calculated and stored in DB
-        sentiment_score, sentiment_label = get_sentiment(title)
+        # Read pre-computed sentiment from DB (written by batch_sentiment.py).
+        # Fall back to on-the-fly only for articles not yet processed by the batch.
+        db_score = item.get("sentiment_score")
+        db_label = item.get("sentiment_label")
+        if db_score is not None and db_label is not None:
+            sentiment_score = float(db_score)
+            sentiment_label = db_label
+        else:
+            sentiment_score, sentiment_label = get_sentiment(title)
         
         news_item = NewsItem(
             title=title,
@@ -236,26 +241,14 @@ def get_feedback_statistics(days: int = 7):
 @app.post("/api/v1/keywords/approve", tags=["Sentiment Learning"])
 def approve_keyword(approval: KeywordApproval):
     """
-    Approve a keyword to be added to the lexicon
+    [Deprecated] Keywords are now auto-activated from keyword_suggestions based on
+    frequency and confidence — no manual approval needed.
+    Returns 410 Gone.
     """
-    try:
-        success = learning_manager.approve_keyword(
-            keyword=approval.keyword,
-            sentiment_type=approval.sentiment_type,
-            weight=approval.weight
-        )
-        
-        if success:
-            # Refresh lexicon cache
-            lexicon_manager.refresh_cache()
-            return {
-                "success": True,
-                "message": f"Keyword '{approval.keyword}' approved"
-            }
-        else:
-            raise HTTPException(status_code=400, detail="Failed to approve keyword")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(
+        status_code=410,
+        detail="Keyword approval is no longer required. Keywords are automatically activated from keyword_suggestions based on frequency and confidence thresholds."
+    )
 
 
 @app.get("/api/v1/keywords/suggestions", tags=["Sentiment Learning"])
@@ -285,10 +278,13 @@ def get_keyword_suggestions(
 @app.get("/api/v1/keywords/approved", tags=["Sentiment Learning"])
 def get_approved_keywords():
     """
-    Get all approved learned keywords
+    Get auto-activated keywords (aggregated from keyword_suggestions).
+    Keywords are activated automatically based on frequency and confidence — no approval needed.
     """
     try:
-        keywords = learning_manager.get_approved_keywords()
+        keywords = learning_manager.get_auto_aggregated_keywords(
+            min_confidence=0.3, min_frequency=2, lookback_days=30
+        )
         return keywords
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -297,15 +293,17 @@ def get_approved_keywords():
 @app.get("/api/v1/lexicon/combined", tags=["Sentiment Learning"])
 def get_combined_lexicon():
     """
-    Get combined lexicon (static + learned)
+    Get combined lexicon (static + auto-learned from keyword_suggestions)
     """
     try:
-        lexicon = lexicon_manager.get_combined_lexicon()
+        auto_kw = learning_manager.get_auto_aggregated_keywords(
+            min_confidence=0.3, min_frequency=2, lookback_days=30
+        )
         return {
-            "positive": lexicon['positive'],
-            "negative": lexicon['negative'],
-            "total_positive": len(lexicon['positive']),
-            "total_negative": len(lexicon['negative'])
+            "positive": auto_kw['positive'],
+            "negative": auto_kw['negative'],
+            "total_positive": len(auto_kw['positive']),
+            "total_negative": len(auto_kw['negative'])
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

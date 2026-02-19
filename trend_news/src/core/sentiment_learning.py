@@ -264,49 +264,6 @@ class SentimentLearningManager:
         finally:
             conn.close()
     
-    def approve_keyword(
-        self, 
-        keyword: str, 
-        sentiment_type: str, 
-        weight: float
-    ) -> bool:
-        """Phê duyệt keyword vào lexicon chính"""
-        conn = self._get_connection()
-        try:
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT OR REPLACE INTO learned_keywords 
-                (keyword, sentiment_type, weight, confidence, frequency, status, last_seen)
-                VALUES (?, ?, ?, 1.0, 1, 'approved', ?)
-            """, (keyword, sentiment_type, weight, datetime.now().isoformat()))
-            conn.commit()
-            return True
-        except Exception as e:
-            print(f"Error approving keyword: {e}")
-            return False
-        finally:
-            conn.close()
-    
-    def get_approved_keywords(self) -> Dict[str, Dict[str, float]]:
-        """Lấy tất cả keywords đã được approve"""
-        conn = self._get_connection()
-        try:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT keyword, sentiment_type, weight
-                FROM learned_keywords
-                WHERE status = 'approved'
-                ORDER BY weight DESC
-            """)
-            
-            results = {'positive': {}, 'negative': {}}
-            for keyword, sentiment_type, weight in cursor.fetchall():
-                results[sentiment_type][keyword] = weight
-            
-            return results
-        finally:
-            conn.close()
-    
     def get_feedback_stats(self, days: int = 7) -> Dict:
         """Lấy thống kê feedback"""
         conn = self._get_connection()
@@ -589,45 +546,3 @@ class SentimentLearningManager:
         }
         
         return combined
-
-
-class DynamicLexiconManager:
-    """Quản lý lexicon động, kết hợp static + learned keywords"""
-    
-    def __init__(self, learning_manager: SentimentLearningManager):
-        self.learning_manager = learning_manager
-        self._cache = None
-        self._cache_time = None
-    
-    def get_combined_lexicon(self) -> Dict[str, Dict[str, float]]:
-        """
-        Lấy lexicon kết hợp (static + learned)
-        Cache 5 phút để tối ưu performance
-        """
-        from src.utils.sentiment import _VI_POSITIVE, _VI_NEGATIVE
-        
-        # Check cache
-        now = datetime.now()
-        if self._cache and self._cache_time:
-            if (now - self._cache_time).seconds < 300:  # 5 minutes
-                return self._cache
-        
-        # Load learned keywords
-        learned = self.learning_manager.get_approved_keywords()
-        
-        # Combine with static
-        combined = {
-            'positive': {**_VI_POSITIVE, **learned['positive']},
-            'negative': {**_VI_NEGATIVE, **learned['negative']}
-        }
-        
-        # Update cache
-        self._cache = combined
-        self._cache_time = now
-        
-        return combined
-    
-    def refresh_cache(self):
-        """Force refresh cache"""
-        self._cache = None
-        self._cache_time = None

@@ -26,7 +26,7 @@ importlib.reload(keyword_extractor)
 importlib.reload(labeling_pipeline)
 importlib.reload(sentiment)
 
-from src.core.sentiment_learning import SentimentLearningManager, DynamicLexiconManager
+from src.core.sentiment_learning import SentimentLearningManager
 from src.core.keyword_extractor import KeywordExtractor
 from src.core.labeling_pipeline import LabelingPipeline
 from src.utils.sentiment import get_sentiment, _VI_POSITIVE, _VI_NEGATIVE, refresh_auto_learned_cache
@@ -74,19 +74,17 @@ st.markdown("""
 # Initialize managers
 # Initialize managers (force reload on each run due to importlib.reload above)
 # Using suppress_st_warning to avoid hash issues with reloaded modules
-@st.cache_resource(hash_funcs={SentimentLearningManager: lambda x: None, 
-                                DynamicLexiconManager: lambda x: None,
+@st.cache_resource(hash_funcs={SentimentLearningManager: lambda x: None,
                                 KeywordExtractor: lambda x: None,
                                 LabelingPipeline: lambda x: None})
 def get_managers():
     # Use default path (output/trend_news.db) - will be auto-detected
     learning_manager = SentimentLearningManager()
-    lexicon_manager = DynamicLexiconManager(learning_manager)
     keyword_extractor = KeywordExtractor()
     labeling_pipeline_obj = LabelingPipeline()
-    return learning_manager, lexicon_manager, keyword_extractor, labeling_pipeline_obj
+    return learning_manager, keyword_extractor, labeling_pipeline_obj
 
-learning_mgr, lexicon_mgr, extractor, labeling_pipeline = get_managers()
+learning_mgr, extractor, labeling_pipeline = get_managers()
 
 # Sidebar navigation
 st.sidebar.markdown("# 🎯 Sentiment Learning")
@@ -113,29 +111,31 @@ if page == "📊 Dashboard":
     with col3:
         st.metric("Avg Error", stats['avg_error'])
     with col4:
-        learned_kw = learning_mgr.get_approved_keywords()
-        total_learned = len(learned_kw['positive']) + len(learned_kw['negative'])
-        st.metric("Learned Keywords", total_learned)
+        auto_kw = learning_mgr.get_auto_aggregated_keywords(min_confidence=0.3, min_frequency=2, lookback_days=30)
+        total_learned = len(auto_kw['positive']) + len(auto_kw['negative'])
+        st.metric("Auto-Learned Keywords", total_learned)
     
     st.markdown("---")
     
     # Lexicon overview
+    st.caption("Keywords dưới đây được tự động học từ feedback — không cần admin approve.")
     col1, col2 = st.columns(2)
-    
+
+    auto_kw_overview = learning_mgr.get_auto_aggregated_keywords(min_confidence=0.3, min_frequency=2, lookback_days=30)
+
     with col1:
-        st.subheader("🟢 Positive Keywords")
-        combined = lexicon_mgr.get_combined_lexicon()
+        st.subheader("🟢 Auto-Learned Positive")
         pos_df = pd.DataFrame([
-            {'Keyword': k, 'Weight': v, 'Source': 'Learned' if k not in _VI_POSITIVE else 'Static'}
-            for k, v in sorted(combined['positive'].items(), key=lambda x: -x[1])[:20]
+            {'Keyword': k, 'Weight': round(v, 3)}
+            for k, v in sorted(auto_kw_overview['positive'].items(), key=lambda x: -x[1])[:20]
         ])
         st.dataframe(pos_df, use_container_width=True, height=400)
-    
+
     with col2:
-        st.subheader("🔴 Negative Keywords")
+        st.subheader("🔴 Auto-Learned Negative")
         neg_df = pd.DataFrame([
-            {'Keyword': k, 'Weight': v, 'Source': 'Learned' if k not in _VI_NEGATIVE else 'Static'}
-            for k, v in sorted(combined['negative'].items(), key=lambda x: -x[1])[:20]
+            {'Keyword': k, 'Weight': round(v, 3)}
+            for k, v in sorted(auto_kw_overview['negative'].items(), key=lambda x: -x[1])[:20]
         ])
         st.dataframe(neg_df, use_container_width=True, height=400)
     
@@ -169,86 +169,50 @@ if page == "📊 Dashboard":
 elif page == "🔤 Keyword Management":
     st.markdown('<div class="main-header">🔤 Keyword Management</div>', unsafe_allow_html=True)
     
-    tab1, tab2, tab3 = st.tabs(["Suggested Keywords", "Manual Add", "Current Lexicon"])
-    
+    tab1, tab2 = st.tabs(["Keyword Suggestions", "Current Lexicon"])
+
     with tab1:
-        st.subheader("Keywords Extracted from Feedback")
-        
-        # Sub-tabs cho Extract và Review
-        extract_tab, review_tab = st.tabs(["🔍 Extract New Patterns", "📋 Review Suggestions"])
-        
+        st.subheader("Keywords Tự Động Học từ Feedback")
+
+        # Sub-tabs: Active view + Review/Remove
+        extract_tab, review_tab = st.tabs(["📊 Auto-Active Keywords", "📋 Review & Remove"])
+
         with extract_tab:
-            col1, col2 = st.columns([1, 3])
+            st.caption("Các keywords dưới đây đang được **tự động sử dụng** trong sentiment scoring — không cần admin approve.")
+
+            col1, col2, col3 = st.columns(3)
             with col1:
-                min_freq = st.slider("Min Frequency", 1, 10, 3, key="extract_freq")
+                min_freq = st.slider("Min Frequency", 1, 10, 2, key="active_min_freq")
             with col2:
-                days = st.slider("Look back (days)", 7, 90, 30, key="extract_days")
-            
-            if st.button("🔍 Analyze & Extract Keywords", type="primary"):
-                with st.spinner("Extracting keywords from feedback patterns..."):
-                    patterns = extractor.analyze_sentiment_patterns(days=days, min_frequency=min_freq)
-                    
-                    # Lưu patterns vào session state để hiển thị
-                    st.session_state['extracted_patterns'] = patterns
-                    st.success(f"Found {len(patterns['positive'])} positive and {len(patterns['negative'])} negative candidates!")
-                    st.rerun()
-            
-            # Hiển thị kết quả extract nếu có
-            if 'extracted_patterns' in st.session_state:
-                patterns = st.session_state['extracted_patterns']
-                
-                st.markdown("### 🟢 Positive Keyword Candidates")
-                for item in patterns['positive'][:20]:
-                    col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
-                    with col1:
-                        st.markdown(f"**{item['keyword']}**")
-                        if item['examples']:
-                            with st.expander("Examples"):
-                                for ex in item['examples']:
-                                    st.text(ex)
-                    with col2:
-                        st.text(f"Freq: {item['frequency']}")
-                    with col3:
-                        st.text(f"Weight: {item['suggested_weight']:.2f}")
-                    with col4:
-                        if st.button("✅ Approve", key=f"extract_pos_{item['keyword']}"):
-                            learning_mgr.approve_keyword(
-                                item['keyword'], 
-                                'positive', 
-                                item['suggested_weight']
-                            )
-                            st.success("Approved!")
-                            lexicon_mgr.refresh_cache()
-                            st.rerun()
-                
-                st.markdown("---")
-                st.markdown("### 🔴 Negative Keyword Candidates")
-                for item in patterns['negative'][:20]:
-                    col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
-                    with col1:
-                        st.markdown(f"**{item['keyword']}**")
-                        if item['examples']:
-                            with st.expander("Examples"):
-                                for ex in item['examples']:
-                                    st.text(ex)
-                    with col2:
-                        st.text(f"Freq: {item['frequency']}")
-                    with col3:
-                        st.text(f"Weight: {item['suggested_weight']:.2f}")
-                    with col4:
-                        if st.button("✅ Approve", key=f"extract_neg_{item['keyword']}"):
-                            learning_mgr.approve_keyword(
-                                item['keyword'],
-                                'negative',
-                                item['suggested_weight']
-                            )
-                            st.success("Approved!")
-                            lexicon_mgr.refresh_cache()
-                            st.rerun()
-        
+                min_conf = st.slider("Min Confidence", 0.1, 1.0, 0.3, step=0.1, key="active_min_conf")
+            with col3:
+                lookback = st.slider("Lookback (days)", 7, 90, 30, key="active_lookback")
+
+            auto_kw = learning_mgr.get_auto_aggregated_keywords(
+                min_confidence=min_conf, min_frequency=min_freq, lookback_days=lookback
+            )
+
+            col_pos, col_neg = st.columns(2)
+
+            with col_pos:
+                st.markdown(f"### 🟢 Positive ({len(auto_kw['positive'])} keywords)")
+                if auto_kw['positive']:
+                    for kw, weight in sorted(auto_kw['positive'].items(), key=lambda x: -x[1])[:30]:
+                        st.markdown(f"🟢 **{kw}** — weight: `{weight:.3f}`")
+                else:
+                    st.info("Chưa có keyword nào đủ điều kiện.")
+
+            with col_neg:
+                st.markdown(f"### 🔴 Negative ({len(auto_kw['negative'])} keywords)")
+                if auto_kw['negative']:
+                    for kw, weight in sorted(auto_kw['negative'].items(), key=lambda x: -x[1])[:30]:
+                        st.markdown(f"🔴 **{kw}** — weight: `{weight:.3f}`")
+                else:
+                    st.info("Chưa có keyword nào đủ điều kiện.")
+
         with review_tab:
-            st.markdown("### 📋 Raw Suggestions")
-            st.caption("Review và remove các keyword suggestions được extract từ feedback.")
+            st.markdown("### 📋 Keyword Suggestions")
+            st.caption("Keywords dưới đây đang được tự động sử dụng trong scoring. Bạn có thể xóa những keyword không phù hợp.")
             
             # Stats
             total_pending = learning_mgr.get_pending_suggestions_count()
@@ -327,57 +291,30 @@ elif page == "🔤 Keyword Management":
                             st.divider()
     
     with tab2:
-        st.subheader("Manually Add Keyword")
-        
-        with st.form("add_keyword_form"):
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                keyword = st.text_input("Keyword*")
-            with col2:
-                sentiment_type = st.selectbox("Type", ["positive", "negative"])
-            with col3:
-                weight = st.slider("Weight", 0.1, 1.0, 0.5, 0.1)
-            
-            if st.form_submit_button("Add Keyword", type="primary"):
-                if keyword:
-                    success = learning_mgr.approve_keyword(keyword, sentiment_type, weight)
-                    if success:
-                        st.success(f"✅ Added '{keyword}' as {sentiment_type} with weight {weight}")
-                        lexicon_mgr.refresh_cache()
-                    else:
-                        st.error("Failed to add keyword")
-    
-    with tab3:
-        st.subheader("Current Lexicon (Static + Learned)")
-        
-        combined = lexicon_mgr.get_combined_lexicon()
-        
+        st.subheader("Current Lexicon (Static + Auto-Learned)")
+        st.caption("Lexicon hiện tại = Static keywords + Auto-learned từ keyword_suggestions.")
+
+        auto_kw_full = learning_mgr.get_auto_aggregated_keywords(min_confidence=0.3, min_frequency=2, lookback_days=30)
+
         col1, col2 = st.columns(2)
-        
+
         with col1:
             st.markdown("### 🟢 Positive")
-            pos_df = pd.DataFrame([
-                {
-                    'Keyword': k, 
-                    'Weight': v, 
-                    'Source': 'Learned' if k not in _VI_POSITIVE else 'Static'
-                }
-                for k, v in sorted(combined['positive'].items(), key=lambda x: -x[1])
-            ])
-            st.dataframe(pos_df, use_container_width=True, height=600)
-        
+            pos_rows = [{'Keyword': k, 'Weight': round(v, 3), 'Source': 'Auto-Learned'}
+                        for k, v in sorted(auto_kw_full['positive'].items(), key=lambda x: -x[1])]
+            pos_rows += [{'Keyword': k, 'Weight': round(v, 3), 'Source': 'Static'}
+                         for k, v in sorted(_VI_POSITIVE.items(), key=lambda x: -x[1])
+                         if k not in auto_kw_full['positive']]
+            st.dataframe(pd.DataFrame(pos_rows), use_container_width=True, height=600)
+
         with col2:
             st.markdown("### 🔴 Negative")
-            neg_df = pd.DataFrame([
-                {
-                    'Keyword': k,
-                    'Weight': v,
-                    'Source': 'Learned' if k not in _VI_NEGATIVE else 'Static'
-                }
-                for k, v in sorted(combined['negative'].items(), key=lambda x: -x[1])
-            ])
-            st.dataframe(neg_df, use_container_width=True, height=600)
+            neg_rows = [{'Keyword': k, 'Weight': round(v, 3), 'Source': 'Auto-Learned'}
+                        for k, v in sorted(auto_kw_full['negative'].items(), key=lambda x: -x[1])]
+            neg_rows += [{'Keyword': k, 'Weight': round(v, 3), 'Source': 'Static'}
+                         for k, v in sorted(_VI_NEGATIVE.items(), key=lambda x: -x[1])
+                         if k not in auto_kw_full['negative']]
+            st.dataframe(pd.DataFrame(neg_rows), use_container_width=True, height=600)
 
 # ============================================================================
 # PAGE 4: ANALYTICS

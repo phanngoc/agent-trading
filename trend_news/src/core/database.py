@@ -70,6 +70,12 @@ class DatabaseManager:
                 # Already fully migrated — ensure all indexes exist (idempotent)
                 self._create_indexes(cursor)
 
+        # Phase 3: pre-computed sentiment columns (idempotent)
+        cursor.execute("PRAGMA table_info(news_articles)")
+        columns_now = {row[1] for row in cursor.fetchall()}
+        if "sentiment_score" not in columns_now:
+            self._migrate_add_sentiment_columns(cursor)
+
         # Always ensure FTS5 index is present (idempotent)
         self._ensure_fts_index(cursor)
 
@@ -77,14 +83,16 @@ class DatabaseManager:
         """Create news_articles table with dedup schema from scratch."""
         cursor.execute("""
             CREATE TABLE news_articles (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                source_id   TEXT NOT NULL,
-                title       TEXT NOT NULL,
-                url         TEXT DEFAULT '',
-                mobile_url  TEXT DEFAULT '',
-                ranks       TEXT,
-                crawled_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                crawl_date  TEXT NOT NULL
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_id       TEXT NOT NULL,
+                title           TEXT NOT NULL,
+                url             TEXT DEFAULT '',
+                mobile_url      TEXT DEFAULT '',
+                ranks           TEXT,
+                crawled_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                crawl_date      TEXT NOT NULL,
+                sentiment_score REAL,
+                sentiment_label TEXT
             )
         """)
         self._create_indexes(cursor)
@@ -335,6 +343,17 @@ class DatabaseManager:
             f"({removed} cross-day duplicates removed)"
         )
 
+    def _migrate_add_sentiment_columns(self, cursor):
+        """
+        Phase 3: Add pre-computed sentiment columns to news_articles.
+        ALTER TABLE ADD COLUMN is safe for nullable columns in SQLite.
+        Existing rows receive NULL — batch_sentiment.py will fill them.
+        """
+        print("DB migration (Phase 3): adding sentiment_score and sentiment_label columns...")
+        cursor.execute("ALTER TABLE news_articles ADD COLUMN sentiment_score REAL")
+        cursor.execute("ALTER TABLE news_articles ADD COLUMN sentiment_label TEXT")
+        print("DB migration (Phase 3) complete.")
+
     def save_news(self, results: Dict, id_to_name: Dict) -> int:
         """
         Save crawled news results to the database.
@@ -404,7 +423,8 @@ class DatabaseManager:
         try:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT source_id, title, url, ranks, crawled_at, mobile_url
+                SELECT source_id, title, url, ranks, crawled_at, mobile_url,
+                       sentiment_score, sentiment_label
                 FROM news_articles
                 ORDER BY crawled_at DESC
                 LIMIT ?
@@ -509,6 +529,7 @@ class DatabaseManager:
 
         query = f"""
             SELECT a.source_id, a.title, a.url, a.mobile_url, a.ranks, a.crawled_at,
+                   a.sentiment_score, a.sentiment_label,
                    CAST((-bm25(news_fts)) * 100 AS INTEGER) AS relevance_score
             FROM news_fts
             JOIN news_articles a ON news_fts.rowid = a.id
@@ -537,7 +558,9 @@ class DatabaseManager:
     ) -> List[Dict]:
         """Standard filtered query without full-text search."""
         query = """
-            SELECT source_id, title, url, mobile_url, ranks, crawled_at, 1 AS relevance_score
+            SELECT source_id, title, url, mobile_url, ranks, crawled_at,
+                   sentiment_score, sentiment_label,
+                   1 AS relevance_score
             FROM news_articles
             WHERE 1=1
         """
@@ -585,6 +608,7 @@ class DatabaseManager:
 
         query = f"""
             SELECT source_id, title, url, mobile_url, ranks, crawled_at,
+                   sentiment_score, sentiment_label,
                    {relevance_expr} AS relevance_score
             FROM news_articles
             WHERE 1=1
@@ -610,3 +634,60 @@ class DatabaseManager:
         cursor.execute(query, tuple(params))
         columns = [col[0] for col in cursor.description]
         return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+    # ------------------------------------------------------------------
+    # Batch sentiment helpers
+    # ------------------------------------------------------------------
+
+    def get_unscored_news(self, limit: int = 500) -> List[Dict]:
+        """
+        Return articles where sentiment_score IS NULL, ordered oldest-first.
+        Used by batch_sentiment.py to find rows that still need scoring.
+        """
+        conn = self._get_connection()
+        results = []
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id, title, crawled_at
+                FROM news_articles
+                WHERE sentiment_score IS NULL
+                ORDER BY crawled_at ASC
+                LIMIT ?
+            """, (limit,))
+            columns = [col[0] for col in cursor.description]
+            for row in cursor.fetchall():
+                results.append(dict(zip(columns, row)))
+        finally:
+            conn.close()
+        return results
+
+    def batch_update_news_sentiment(
+        self, updates: List[Tuple[int, float, str]]
+    ) -> int:
+        """
+        Bulk-update sentiment_score and sentiment_label for a list of articles.
+
+        Args:
+            updates: List of (article_id, sentiment_score, sentiment_label)
+
+        Returns:
+            Number of rows updated.
+        """
+        if not updates:
+            return 0
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.executemany("""
+                UPDATE news_articles
+                SET sentiment_score = ?, sentiment_label = ?
+                WHERE id = ?
+            """, [(score, label, article_id) for article_id, score, label in updates])
+            conn.commit()
+            return cursor.rowcount
+        except Exception as e:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
