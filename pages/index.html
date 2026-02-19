@@ -1,0 +1,1102 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TradingAgents × TrendNews — Bộ công cụ phân tích tài chính AI</title>
+  <meta name="description" content="Multi-agent LLM trading framework và Vietnamese financial news API. Phân tích thị trường thông minh với AI.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --bg2: #111118;
+      --bg3: #1a1a24;
+      --border: rgba(255,255,255,0.08);
+      --text: #e8e8f0;
+      --muted: #8888a8;
+      --primary: #6366f1;
+      --primary-light: #818cf8;
+      --secondary: #22d3ee;
+      --accent: #a78bfa;
+      --green: #10b981;
+      --red: #ef4444;
+      --yellow: #f59e0b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      font-size: 16px;
+    }
+    a { color: var(--primary-light); text-decoration: none; }
+    a:hover { color: var(--secondary); }
+    code, pre { font-family: 'JetBrains Mono', monospace; }
+
+    /* NAV */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(10,10,15,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+    }
+    .nav-inner {
+      max-width: 1100px; margin: 0 auto;
+      display: flex; align-items: center; justify-content: space-between;
+      height: 60px;
+    }
+    .nav-logo {
+      font-weight: 700; font-size: 18px;
+      display: flex; align-items: center; gap: 8px; color: var(--text);
+    }
+    .nav-logo .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--primary); display: inline-block; }
+    .nav-links { display: flex; gap: 28px; align-items: center; }
+    .nav-links a { color: var(--muted); font-size: 14px; font-weight: 500; transition: color .2s; }
+    .nav-links a:hover { color: var(--text); }
+    .nav-cta {
+      background: var(--primary); color: white;
+      padding: 7px 16px; border-radius: 8px; font-size: 14px; font-weight: 600;
+      transition: all .2s;
+    }
+    .nav-cta:hover { background: var(--primary-light); color: white; }
+
+    /* SECTIONS */
+    section { padding: 80px 24px; }
+    .container { max-width: 1100px; margin: 0 auto; }
+    .section-tag {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(99,102,241,0.12); border: 1px solid rgba(99,102,241,0.3);
+      color: var(--primary-light); font-size: 12px; font-weight: 600;
+      padding: 4px 12px; border-radius: 999px; text-transform: uppercase; letter-spacing: .05em;
+      margin-bottom: 16px;
+    }
+    h1, h2, h3, h4 { font-weight: 700; line-height: 1.2; }
+    h1 { font-size: clamp(36px, 6vw, 60px); }
+    h2 { font-size: clamp(28px, 4vw, 40px); }
+    h3 { font-size: 22px; }
+    .muted { color: var(--muted); }
+    .lead { font-size: 18px; color: var(--muted); line-height: 1.7; }
+
+    /* HERO */
+    #hero {
+      padding: 120px 24px 80px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    #hero::before {
+      content: '';
+      position: absolute; top: -200px; left: 50%; transform: translateX(-50%);
+      width: 800px; height: 800px;
+      background: radial-gradient(circle, rgba(99,102,241,0.15) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.25);
+      color: var(--accent); font-size: 13px; font-weight: 500;
+      padding: 6px 14px; border-radius: 999px; margin-bottom: 24px;
+    }
+    .hero-badge::before { content: '✦'; }
+    .hero-title {
+      margin-bottom: 24px;
+      background: linear-gradient(135deg, #e8e8f0 0%, var(--accent) 50%, var(--secondary) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .hero-sub { max-width: 600px; margin: 0 auto 40px; font-size: 18px; color: var(--muted); }
+    .hero-btns { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .btn-primary {
+      background: var(--primary); color: white;
+      padding: 12px 28px; border-radius: 10px; font-weight: 600; font-size: 15px;
+      transition: all .2s; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 8px;
+    }
+    .btn-primary:hover { background: var(--primary-light); color: white; transform: translateY(-1px); box-shadow: 0 8px 24px rgba(99,102,241,0.4); }
+    .btn-ghost {
+      background: transparent; color: var(--text);
+      padding: 12px 28px; border-radius: 10px; font-weight: 600; font-size: 15px;
+      border: 1px solid var(--border); transition: all .2s; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 8px;
+    }
+    .btn-ghost:hover { border-color: var(--primary); color: var(--primary-light); }
+    .hero-stats {
+      display: flex; justify-content: center; gap: 48px; margin-top: 64px; flex-wrap: wrap;
+    }
+    .stat { text-align: center; }
+    .stat-num { font-size: 36px; font-weight: 800; color: var(--text); }
+    .stat-num span { color: var(--primary-light); }
+    .stat-label { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+    /* PRODUCTS */
+    .products-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 24px;
+    }
+    @media (max-width: 768px) { .products-grid { grid-template-columns: 1fr; } }
+    .product-card {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 16px; padding: 32px; position: relative; overflow: hidden;
+      transition: border-color .2s, transform .2s;
+    }
+    .product-card:hover { border-color: var(--primary); transform: translateY(-2px); }
+    .product-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    }
+    .product-card.ta::before { background: linear-gradient(90deg, var(--primary), var(--accent)); }
+    .product-card.tn::before { background: linear-gradient(90deg, var(--secondary), var(--green)); }
+    .product-icon {
+      width: 48px; height: 48px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; margin-bottom: 20px;
+    }
+    .product-icon.ta { background: rgba(99,102,241,0.15); }
+    .product-icon.tn { background: rgba(34,211,238,0.15); }
+    .product-card h3 { margin-bottom: 8px; }
+    .product-card .desc { color: var(--muted); font-size: 14px; line-height: 1.7; margin-bottom: 20px; }
+    .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tag {
+      font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 999px;
+      text-transform: uppercase; letter-spacing: .03em;
+    }
+    .tag-blue { background: rgba(99,102,241,0.15); color: var(--primary-light); }
+    .tag-cyan { background: rgba(34,211,238,0.15); color: var(--secondary); }
+    .tag-green { background: rgba(16,185,129,0.15); color: var(--green); }
+    .tag-purple { background: rgba(167,139,250,0.15); color: var(--accent); }
+
+    /* FEATURES */
+    #features { background: var(--bg2); }
+    .features-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;
+    }
+    .feat-card {
+      background: var(--bg3); border: 1px solid var(--border);
+      border-radius: 12px; padding: 24px;
+      transition: border-color .2s;
+    }
+    .feat-card:hover { border-color: rgba(99,102,241,0.4); }
+    .feat-icon { font-size: 28px; margin-bottom: 12px; }
+    .feat-card h4 { margin-bottom: 8px; font-size: 16px; }
+    .feat-card p { color: var(--muted); font-size: 14px; line-height: 1.6; }
+
+    /* ARCHITECTURE */
+    .arch-flow {
+      display: flex; align-items: flex-start; gap: 0;
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 16px; overflow: hidden;
+    }
+    .arch-step {
+      flex: 1; padding: 24px;
+      border-right: 1px solid var(--border);
+      position: relative;
+    }
+    .arch-step:last-child { border-right: none; }
+    .arch-step::after {
+      content: '→'; position: absolute; right: -12px; top: 50%;
+      transform: translateY(-50%); color: var(--primary);
+      font-size: 18px; font-weight: 700; z-index: 1;
+    }
+    .arch-step:last-child::after { display: none; }
+    .step-num {
+      font-size: 11px; font-weight: 700; color: var(--primary-light);
+      text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px;
+    }
+    .arch-step h4 { font-size: 14px; margin-bottom: 6px; }
+    .arch-step p { font-size: 12px; color: var(--muted); }
+    @media (max-width: 600px) {
+      .arch-flow { flex-direction: column; }
+      .arch-step::after { content: '↓'; right: auto; left: 50%; top: auto; bottom: -12px; transform: translateX(-50%); }
+      .arch-step { border-right: none; border-bottom: 1px solid var(--border); }
+      .arch-step:last-child { border-bottom: none; }
+    }
+
+    /* API DOCS */
+    #api { background: var(--bg2); }
+    .api-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+    @media (max-width: 900px) { .api-grid { grid-template-columns: 1fr; } }
+    .endpoint-card {
+      background: var(--bg3); border: 1px solid var(--border);
+      border-radius: 12px; padding: 24px; margin-bottom: 16px;
+    }
+    .method {
+      display: inline-block; font-size: 11px; font-weight: 700;
+      padding: 2px 8px; border-radius: 4px; margin-right: 8px;
+    }
+    .get { background: rgba(16,185,129,0.2); color: var(--green); }
+    .post { background: rgba(245,158,11,0.2); color: var(--yellow); }
+    .endpoint-path { font-family: 'JetBrains Mono', monospace; font-size: 14px; color: var(--secondary); }
+    .endpoint-desc { color: var(--muted); font-size: 13px; margin: 10px 0; }
+    .param-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .param-table th {
+      text-align: left; padding: 8px 12px;
+      color: var(--muted); font-weight: 600; font-size: 11px;
+      text-transform: uppercase; letter-spacing: .06em;
+      border-bottom: 1px solid var(--border);
+    }
+    .param-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+    .param-table tr:last-child td { border-bottom: none; }
+    .param-name { font-family: 'JetBrains Mono', monospace; color: var(--accent); font-size: 12px; }
+    .param-type { color: var(--muted); font-size: 12px; }
+    .code-block {
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 10px; padding: 20px; overflow-x: auto;
+      font-size: 13px; line-height: 1.7;
+    }
+    .code-block .kw { color: var(--primary-light); }
+    .code-block .str { color: var(--green); }
+    .code-block .comment { color: var(--muted); }
+    .code-block .num { color: var(--yellow); }
+    .code-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 12px;
+    }
+    .code-title { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+    .copy-btn {
+      font-size: 12px; color: var(--muted); background: none; border: none;
+      cursor: pointer; padding: 4px 8px; border-radius: 4px;
+      border: 1px solid var(--border); transition: all .2s;
+    }
+    .copy-btn:hover { color: var(--text); border-color: var(--primary); }
+
+    /* PRICING */
+    .pricing-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px;
+    }
+    .price-card {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 16px; padding: 28px;
+      display: flex; flex-direction: column;
+      transition: border-color .3s, transform .2s;
+    }
+    .price-card:hover { border-color: var(--primary); transform: translateY(-3px); }
+    .price-card.popular {
+      border-color: var(--primary);
+      background: linear-gradient(135deg, rgba(99,102,241,0.08) 0%, var(--bg2) 100%);
+    }
+    .popular-badge {
+      display: inline-block; background: var(--primary);
+      color: white; font-size: 11px; font-weight: 700;
+      padding: 3px 10px; border-radius: 999px; margin-bottom: 16px;
+      text-transform: uppercase; letter-spacing: .05em;
+    }
+    .plan-name { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+    .plan-desc { font-size: 13px; color: var(--muted); margin-bottom: 20px; }
+    .plan-price {
+      margin-bottom: 24px;
+    }
+    .price-num { font-size: 40px; font-weight: 800; }
+    .price-unit { font-size: 14px; color: var(--muted); }
+    .plan-features { list-style: none; flex: 1; }
+    .plan-features li {
+      padding: 8px 0; font-size: 14px;
+      display: flex; align-items: flex-start; gap: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .plan-features li:last-child { border-bottom: none; }
+    .plan-features .check { color: var(--green); flex-shrink: 0; }
+    .plan-features .x { color: var(--muted); flex-shrink: 0; }
+    .plan-btn {
+      margin-top: 24px; width: 100%; padding: 12px;
+      border-radius: 10px; font-weight: 600; font-size: 14px;
+      cursor: pointer; transition: all .2s; border: none; text-align: center;
+    }
+    .plan-btn-primary { background: var(--primary); color: white; }
+    .plan-btn-primary:hover { background: var(--primary-light); transform: translateY(-1px); }
+    .plan-btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
+    .plan-btn-ghost:hover { border-color: var(--primary); color: var(--primary-light); }
+
+    /* SOURCES */
+    .sources-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px;
+    }
+    .source-chip {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 10px; padding: 14px;
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+      transition: border-color .2s;
+    }
+    .source-chip:hover { border-color: var(--secondary); }
+    .source-chip .icon { font-size: 20px; }
+    .source-chip .name { font-size: 12px; font-weight: 600; }
+    .source-chip .type { font-size: 11px; color: var(--muted); }
+
+    /* QUICK START */
+    .tabs { display: flex; gap: 4px; margin-bottom: 16px; flex-wrap: wrap; }
+    .tab {
+      padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+      cursor: pointer; border: 1px solid var(--border); background: transparent;
+      color: var(--muted); transition: all .2s;
+    }
+    .tab.active { background: var(--primary); color: white; border-color: var(--primary); }
+    .tab:hover:not(.active) { border-color: var(--primary); color: var(--primary-light); }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* BLOG */
+    .blog-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px;
+    }
+    .blog-card {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 12px; overflow: hidden;
+      transition: border-color .2s, transform .2s;
+      display: flex; flex-direction: column;
+    }
+    .blog-card:hover { border-color: var(--primary); transform: translateY(-2px); }
+    .blog-thumb {
+      height: 160px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 48px;
+    }
+    .blog-thumb.t1 { background: linear-gradient(135deg, rgba(99,102,241,0.3), rgba(167,139,250,0.2)); }
+    .blog-thumb.t2 { background: linear-gradient(135deg, rgba(34,211,238,0.3), rgba(16,185,129,0.2)); }
+    .blog-thumb.t3 { background: linear-gradient(135deg, rgba(245,158,11,0.3), rgba(239,68,68,0.2)); }
+    .blog-body { padding: 20px; flex: 1; }
+    .blog-meta { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+    .blog-title { font-size: 16px; font-weight: 600; margin-bottom: 8px; line-height: 1.4; }
+    .blog-excerpt { font-size: 13px; color: var(--muted); line-height: 1.6; }
+    .blog-footer {
+      padding: 16px 20px; border-top: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .blog-tags { display: flex; gap: 6px; }
+    .read-more { font-size: 13px; color: var(--primary-light); font-weight: 500; }
+
+    /* FOOTER */
+    footer {
+      background: var(--bg2); border-top: 1px solid var(--border);
+      padding: 48px 24px 24px;
+    }
+    .footer-grid {
+      display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 40px;
+      max-width: 1100px; margin: 0 auto 40px;
+    }
+    @media (max-width: 768px) { .footer-grid { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 480px) { .footer-grid { grid-template-columns: 1fr; } }
+    .footer-brand { }
+    .footer-brand .logo { font-size: 20px; font-weight: 800; margin-bottom: 12px; }
+    .footer-brand p { font-size: 14px; color: var(--muted); line-height: 1.6; }
+    .footer-col h5 { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 16px; color: var(--muted); }
+    .footer-col ul { list-style: none; }
+    .footer-col li { margin-bottom: 10px; }
+    .footer-col a { font-size: 14px; color: var(--muted); transition: color .2s; }
+    .footer-col a:hover { color: var(--text); }
+    .footer-bottom {
+      max-width: 1100px; margin: 0 auto;
+      border-top: 1px solid var(--border); padding-top: 24px;
+      display: flex; justify-content: space-between; align-items: center; flex-wrap: gap;
+      font-size: 13px; color: var(--muted);
+    }
+    .status-dot {
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .status-dot::before {
+      content: ''; width: 6px; height: 6px; border-radius: 50%;
+      background: var(--green); box-shadow: 0 0 6px var(--green); display: inline-block;
+    }
+
+    /* SCROLLBAR */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* UTILS */
+    .mt-4 { margin-top: 16px; }
+    .mt-8 { margin-top: 32px; }
+    .mt-12 { margin-top: 48px; }
+    .mb-2 { margin-bottom: 8px; }
+    .mb-4 { margin-bottom: 16px; }
+    .mb-6 { margin-bottom: 24px; }
+    .text-center { text-align: center; }
+    .divider { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    @media (max-width: 700px) { .grid-2 { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-inner">
+    <div class="nav-logo">
+      <span class="dot"></span>
+      FinAI Suite
+    </div>
+    <div class="nav-links">
+      <a href="#products">Sản phẩm</a>
+      <a href="#api">API</a>
+      <a href="#pricing">Giá cả</a>
+      <a href="#blog">Blog</a>
+      <a href="#pricing" class="nav-cta">Bắt đầu miễn phí</a>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section id="hero">
+  <div class="container">
+    <div class="hero-badge">Ra mắt v2.0 — Hỗ trợ đa LLM Provider</div>
+    <h1 class="hero-title">Phân tích tài chính<br>thế hệ AI mới</h1>
+    <p class="hero-sub">
+      Kết hợp <strong style="color:var(--accent)">TradingAgents</strong> — framework giao dịch đa agent —
+      với <strong style="color:var(--secondary)">TrendNews API</strong> — luồng tin tức tài chính Việt Nam
+      theo thời gian thực.
+    </p>
+    <div class="hero-btns">
+      <a href="#pricing" class="btn-primary">🚀 Bắt đầu miễn phí</a>
+      <a href="https://github.com/TauricResearch/TradingAgents" class="btn-ghost" target="_blank">
+        ⭐ GitHub
+      </a>
+    </div>
+    <div class="hero-stats">
+      <div class="stat">
+        <div class="stat-num">9<span>+</span></div>
+        <div class="stat-label">Nguồn tin Việt Nam</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num">6<span>+</span></div>
+        <div class="stat-label">LLM Providers</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num">4</div>
+        <div class="stat-label">Loại analyst AI</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num">100<span>%</span></div>
+        <div class="stat-label">Open Source</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRODUCTS -->
+<section id="products">
+  <div class="container">
+    <div class="section-tag">✦ Sản phẩm</div>
+    <h2 class="mb-4">Hai công cụ, một hệ sinh thái</h2>
+    <p class="lead mb-8">Từ thu thập tin tức đến quyết định giao dịch — tất cả trong một nền tảng tích hợp.</p>
+    <div class="products-grid">
+      <div class="product-card ta">
+        <div class="product-icon ta">🤖</div>
+        <h3>TradingAgents</h3>
+        <p class="desc">
+          Framework giao dịch đa agent mô phỏng quy trình của một công ty tài chính thực sự.
+          Đội ngũ các AI analyst, researcher, trader và risk manager phối hợp phân tích thị trường
+          và đưa ra quyết định giao dịch có căn cứ.
+        </p>
+        <div class="tags">
+          <span class="tag tag-blue">Multi-Agent</span>
+          <span class="tag tag-purple">LangGraph</span>
+          <span class="tag tag-blue">GPT-5</span>
+          <span class="tag tag-purple">Claude 4</span>
+          <span class="tag tag-blue">Gemini 3</span>
+        </div>
+        <div style="margin-top:20px">
+          <a href="#tradingagents-detail" class="btn-primary" style="font-size:14px;padding:10px 20px">
+            Khám phá →
+          </a>
+        </div>
+      </div>
+      <div class="product-card tn">
+        <div class="product-icon tn">📡</div>
+        <h3>TrendNews API</h3>
+        <p class="desc">
+          API thu thập và phân tích tin tức tài chính Việt Nam theo thời gian thực từ 9+ nguồn hàng đầu.
+          Tương thích hoàn toàn với Alpha Vantage API format, cho phép tích hợp nhanh vào
+          TradingAgents hoặc hệ thống phân tích hiện có của bạn.
+        </p>
+        <div class="tags">
+          <span class="tag tag-cyan">REST API</span>
+          <span class="tag tag-green">Sentiment AI</span>
+          <span class="tag tag-cyan">Alpha Vantage Compatible</span>
+          <span class="tag tag-green">Real-time</span>
+        </div>
+        <div style="margin-top:20px">
+          <a href="#api" class="btn-primary" style="font-size:14px;padding:10px 20px;background:var(--secondary);color:var(--bg)">
+            Xem API →
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TRADINGAGENTS DETAIL -->
+<section id="tradingagents-detail" style="background:var(--bg2)">
+  <div class="container">
+    <div class="section-tag">🤖 TradingAgents</div>
+    <div class="grid-2" style="align-items:start; margin-bottom:40px">
+      <div>
+        <h2 class="mb-4">Đội ngũ AI analyst<br>làm việc cho bạn</h2>
+        <p class="lead">
+          Mỗi agent chuyên biệt vào một khía cạnh của thị trường — như một phòng nghiên cứu thực sự,
+          nhưng không ngủ và không mắc sai lầm vì cảm xúc.
+        </p>
+      </div>
+      <div>
+        <div class="features-grid" style="grid-template-columns:1fr 1fr">
+          <div class="feat-card">
+            <div class="feat-icon">📊</div>
+            <h4>Fundamental Analyst</h4>
+            <p>Phân tích tài chính công ty, P/E, P/B, EPS và các chỉ số nội tại.</p>
+          </div>
+          <div class="feat-card">
+            <div class="feat-icon">💬</div>
+            <h4>Sentiment Analyst</h4>
+            <p>Đo lường tâm lý thị trường từ mạng xã hội và tin tức.</p>
+          </div>
+          <div class="feat-card">
+            <div class="feat-icon">📰</div>
+            <h4>News Analyst</h4>
+            <p>Theo dõi tin tức vĩ mô và sự kiện ảnh hưởng đến thị trường.</p>
+          </div>
+          <div class="feat-card">
+            <div class="feat-icon">📈</div>
+            <h4>Technical Analyst</h4>
+            <p>MACD, RSI, Bollinger Bands — nhận diện mô hình giá và xu hướng.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3 class="mb-4">Luồng quyết định giao dịch</h3>
+    <div class="arch-flow">
+      <div class="arch-step">
+        <div class="step-num">Step 1</div>
+        <h4>📡 Thu thập dữ liệu</h4>
+        <p>TrendNews API + Alpha Vantage + Yahoo Finance</p>
+      </div>
+      <div class="arch-step">
+        <div class="step-num">Step 2</div>
+        <h4>🔬 Analyst Team</h4>
+        <p>4 analyst chuyên biệt phân tích song song</p>
+      </div>
+      <div class="arch-step">
+        <div class="step-num">Step 3</div>
+        <h4>⚔️ Research Debate</h4>
+        <p>Bull vs Bear tranh luận để cân bằng rủi ro</p>
+      </div>
+      <div class="arch-step">
+        <div class="step-num">Step 4</div>
+        <h4>💼 Trader Decision</h4>
+        <p>Tổng hợp báo cáo và đưa ra chiến lược</p>
+      </div>
+      <div class="arch-step">
+        <div class="step-num">Step 5</div>
+        <h4>🛡️ Risk Management</h4>
+        <p>Portfolio Manager phê duyệt/từ chối giao dịch</p>
+      </div>
+    </div>
+
+    <div class="mt-8">
+      <h3 class="mb-4">Python Quickstart</h3>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-title">Python</span>
+          <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+        </div>
+<pre><span class="kw">from</span> tradingagents.graph.trading_graph <span class="kw">import</span> TradingAgentsGraph
+<span class="kw">from</span> tradingagents.default_config <span class="kw">import</span> DEFAULT_CONFIG
+
+<span class="comment"># Cấu hình LLM provider</span>
+config = DEFAULT_CONFIG.copy()
+config[<span class="str">"llm_provider"</span>] = <span class="str">"anthropic"</span>     <span class="comment"># openai | google | anthropic | xai</span>
+config[<span class="str">"deep_think_llm"</span>] = <span class="str">"claude-opus-4-6"</span>
+config[<span class="str">"quick_think_llm"</span>] = <span class="str">"claude-haiku-4-5"</span>
+config[<span class="str">"max_debate_rounds"</span>] = <span class="num">2</span>
+
+<span class="comment"># Tích hợp TrendNews API cho tin tức Việt Nam</span>
+config[<span class="str">"news_api_url"</span>] = <span class="str">"http://your-trendnews.api/query"</span>
+
+<span class="comment"># Khởi tạo và chạy phân tích</span>
+ta = TradingAgentsGraph(debug=<span class="kw">True</span>, config=config)
+_, decision = ta.propagate(<span class="str">"VCB"</span>, <span class="str">"2026-02-19"</span>)
+<span class="kw">print</span>(decision)</pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- API DOCS -->
+<section id="api">
+  <div class="container">
+    <div class="section-tag">📡 TrendNews API</div>
+    <div class="grid-2" style="align-items:start; margin-bottom:40px">
+      <div>
+        <h2 class="mb-4">API tin tức tài chính<br>cho thị trường Việt Nam</h2>
+        <p class="lead">
+          Thu thập từ 9+ nguồn uy tín, phân tích sentiment tự động với lexicon tiếng Việt
+          và tương thích Alpha Vantage format để tích hợp ngay lập tức.
+        </p>
+      </div>
+      <div>
+        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:20px">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:12px;font-weight:600;text-transform:uppercase">Base URL</div>
+          <code style="color:var(--secondary);font-size:14px">http://your-server:8000</code>
+          <hr class="divider">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:8px;font-weight:600;text-transform:uppercase">Sentiment Scale</div>
+          <div style="font-size:13px;display:flex;flex-direction:column;gap:6px">
+            <div>🔴 <code style="color:var(--red)">≤ -0.35</code> — Bearish</div>
+            <div>🟠 <code style="color:var(--yellow)">-0.35 → -0.15</code> — Somewhat Bearish</div>
+            <div>⚪ <code style="color:var(--muted)">-0.15 → 0.15</code> — Neutral</div>
+            <div>🟡 <code style="color:var(--yellow)">0.15 → 0.35</code> — Somewhat Bullish</div>
+            <div>🟢 <code style="color:var(--green)">≥ 0.35</code> — Bullish</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Endpoint cards -->
+    <div class="api-grid">
+      <div>
+        <h3 class="mb-4">Endpoints</h3>
+
+        <div class="endpoint-card">
+          <div>
+            <span class="method get">GET</span>
+            <span class="endpoint-path">/query</span>
+          </div>
+          <p class="endpoint-desc">Alpha Vantage compatible — tương thích plug-and-play với TradingAgents</p>
+          <table class="param-table">
+            <tr><th>Param</th><th>Type</th><th>Mô tả</th></tr>
+            <tr><td><span class="param-name">function</span></td><td><span class="param-type">string*</span></td><td>NEWS_SENTIMENT</td></tr>
+            <tr><td><span class="param-name">tickers</span></td><td><span class="param-type">string</span></td><td>Mã CP: VCB, VIC...</td></tr>
+            <tr><td><span class="param-name">time_from</span></td><td><span class="param-type">string</span></td><td>YYYYMMDDTHHMM</td></tr>
+            <tr><td><span class="param-name">time_to</span></td><td><span class="param-type">string</span></td><td>YYYYMMDDTHHMM</td></tr>
+            <tr><td><span class="param-name">limit</span></td><td><span class="param-type">int</span></td><td>Số kết quả (mặc định: 50)</td></tr>
+            <tr><td><span class="param-name">apikey</span></td><td><span class="param-type">string</span></td><td>API Key</td></tr>
+          </table>
+        </div>
+
+        <div class="endpoint-card">
+          <div>
+            <span class="method get">GET</span>
+            <span class="endpoint-path">/api/v1/news</span>
+          </div>
+          <p class="endpoint-desc">Native API với filter linh hoạt hơn</p>
+          <table class="param-table">
+            <tr><th>Param</th><th>Type</th><th>Mô tả</th></tr>
+            <tr><td><span class="param-name">source</span></td><td><span class="param-type">string</span></td><td>cafef, vnexpress, ...</td></tr>
+            <tr><td><span class="param-name">tickers</span></td><td><span class="param-type">string</span></td><td>VIC,HPG (comma-separated)</td></tr>
+            <tr><td><span class="param-name">start_date</span></td><td><span class="param-type">string</span></td><td>YYYY-MM-DD</td></tr>
+            <tr><td><span class="param-name">end_date</span></td><td><span class="param-type">string</span></td><td>YYYY-MM-DD</td></tr>
+            <tr><td><span class="param-name">limit</span></td><td><span class="param-type">int</span></td><td>Số kết quả</td></tr>
+          </table>
+        </div>
+
+        <div class="endpoint-card">
+          <div>
+            <span class="method post">POST</span>
+            <span class="endpoint-path">/api/v1/feedback</span>
+          </div>
+          <p class="endpoint-desc">Gửi phản hồi để cải thiện độ chính xác sentiment</p>
+        </div>
+
+        <div class="endpoint-card">
+          <div>
+            <span class="method get">GET</span>
+            <span class="endpoint-path">/api/v1/feedback/stats</span>
+          </div>
+          <p class="endpoint-desc">Thống kê độ chính xác dự đoán</p>
+        </div>
+      </div>
+
+      <div>
+        <h3 class="mb-4">Ví dụ tích hợp</h3>
+
+        <div class="tabs">
+          <button class="tab active" onclick="switchTab(this,'python')">Python</button>
+          <button class="tab" onclick="switchTab(this,'curl')">cURL</button>
+          <button class="tab" onclick="switchTab(this,'js')">JavaScript</button>
+        </div>
+
+        <div id="tab-python" class="tab-content active">
+          <div class="code-block">
+            <div class="code-header">
+              <span class="code-title">Alpha Vantage Compatible</span>
+              <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+            </div>
+<pre><span class="kw">import</span> requests
+
+BASE_URL = <span class="str">"http://your-server:8000"</span>
+API_KEY  = <span class="str">"your-api-key"</span>
+
+<span class="comment"># Lấy tin tức kèm sentiment cho mã VCB</span>
+resp = requests.get(f<span class="str">"{BASE_URL}/query"</span>, params={
+    <span class="str">"function"</span>: <span class="str">"NEWS_SENTIMENT"</span>,
+    <span class="str">"tickers"</span>: <span class="str">"VCB"</span>,
+    <span class="str">"time_from"</span>: <span class="str">"20260201T0000"</span>,
+    <span class="str">"limit"</span>:    <span class="num">20</span>,
+    <span class="str">"apikey"</span>:   API_KEY,
+})
+
+data = resp.json()
+<span class="kw">for</span> news <span class="kw">in</span> data[<span class="str">"feed"</span>]:
+    score = news[<span class="str">"overall_sentiment_score"</span>]
+    label = news[<span class="str">"overall_sentiment_label"</span>]
+    <span class="kw">print</span>(f<span class="str">"{label:15} [{score:+.2f}] {news['title'][:60]}"</span>)</pre>
+          </div>
+        </div>
+
+        <div id="tab-curl" class="tab-content">
+          <div class="code-block">
+            <div class="code-header">
+              <span class="code-title">cURL</span>
+              <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+            </div>
+<pre><span class="comment"># Alpha Vantage compatible endpoint</span>
+curl -G "http://your-server:8000/query" \
+  --data-urlencode "function=NEWS_SENTIMENT" \
+  --data-urlencode "tickers=VCB" \
+  --data-urlencode "limit=20" \
+  --data-urlencode "apikey=your-api-key"
+
+<span class="comment"># Native API với filter theo nguồn</span>
+curl "http://your-server:8000/api/v1/news?\
+source=cafef&tickers=VIC,HPG&limit=30"</pre>
+          </div>
+        </div>
+
+        <div id="tab-js" class="tab-content">
+          <div class="code-block">
+            <div class="code-header">
+              <span class="code-title">JavaScript / Node.js</span>
+              <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+            </div>
+<pre><span class="kw">const</span> BASE_URL = <span class="str">'http://your-server:8000'</span>;
+<span class="kw">const</span> API_KEY  = <span class="str">'your-api-key'</span>;
+
+<span class="kw">async function</span> getNewsSentiment(ticker) {
+  <span class="kw">const</span> params = <span class="kw">new</span> URLSearchParams({
+    function: <span class="str">'NEWS_SENTIMENT'</span>,
+    tickers:  ticker,
+    limit:    <span class="str">'20'</span>,
+    apikey:   API_KEY,
+  });
+
+  <span class="kw">const</span> res  = <span class="kw">await</span> fetch(`${BASE_URL}/query?${params}`);
+  <span class="kw">const</span> data = <span class="kw">await</span> res.json();
+
+  <span class="kw">return</span> data.feed.map(n => ({
+    title:     n.title,
+    sentiment: n.overall_sentiment_label,
+    score:     n.overall_sentiment_score,
+    source:    n.source,
+    time:      n.time_published,
+  }));
+}
+
+<span class="comment">// Sử dụng</span>
+getNewsSentiment(<span class="str">'VCB'</span>).then(console.log);</pre>
+          </div>
+        </div>
+
+        <div class="mt-4" style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:20px">
+          <div style="font-size:13px;font-weight:700;margin-bottom:12px">📦 Nguồn tin hỗ trợ</div>
+          <div class="sources-grid" style="grid-template-columns:repeat(3,1fr)">
+            <div class="source-chip"><span class="icon">📰</span><span class="name">CafeF</span><span class="type">Chứng khoán</span></div>
+            <div class="source-chip"><span class="icon">🌐</span><span class="name">VnExpress</span><span class="type">Tổng hợp</span></div>
+            <div class="source-chip"><span class="icon">💹</span><span class="name">TNCK</span><span class="type">Chứng khoán</span></div>
+            <div class="source-chip"><span class="icon">📊</span><span class="name">VnEconomy</span><span class="type">Kinh tế</span></div>
+            <div class="source-chip"><span class="icon">💰</span><span class="name">VietnamBiz</span><span class="type">Tài chính</span></div>
+            <div class="source-chip"><span class="icon">🏦</span><span class="name">BaoDauTu</span><span class="type">Đầu tư</span></div>
+            <div class="source-chip"><span class="icon">⏰</span><span class="name">Money24h</span><span class="type">Tài chính</span></div>
+            <div class="source-chip"><span class="icon">📱</span><span class="name">DanTri</span><span class="type">Tổng hợp</span></div>
+            <div class="source-chip"><span class="icon">🌏</span><span class="name">VietnamFinance</span><span class="type">Tài chính</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section id="pricing" style="background:var(--bg2)">
+  <div class="container">
+    <div class="text-center mb-6">
+      <div class="section-tag" style="margin:0 auto 16px">💰 Pricing</div>
+      <h2 class="mb-4">Giá minh bạch, không phí ẩn</h2>
+      <p class="lead">Bắt đầu miễn phí. Nâng cấp khi bạn cần thêm.</p>
+    </div>
+
+    <div class="pricing-grid">
+      <!-- FREE -->
+      <div class="price-card">
+        <div class="plan-name">Free</div>
+        <div class="plan-desc">Tự host — mã nguồn mở hoàn toàn</div>
+        <div class="plan-price">
+          <span class="price-num">0</span><span class="price-unit"> đ / tháng</span>
+        </div>
+        <ul class="plan-features">
+          <li><span class="check">✓</span> Self-hosted không giới hạn request</li>
+          <li><span class="check">✓</span> 9 nguồn tin Việt Nam</li>
+          <li><span class="check">✓</span> Alpha Vantage compatible API</li>
+          <li><span class="check">✓</span> Sentiment analysis cơ bản</li>
+          <li><span class="check">✓</span> Cộng đồng GitHub</li>
+          <li><span class="x">–</span> Managed cloud hosting</li>
+          <li><span class="x">–</span> SLA & uptime guarantee</li>
+        </ul>
+        <a href="https://github.com/TauricResearch/TradingAgents" target="_blank" class="plan-btn plan-btn-ghost" style="display:block;text-align:center;margin-top:24px">
+          Clone GitHub →
+        </a>
+      </div>
+
+      <!-- STARTER -->
+      <div class="price-card">
+        <div class="plan-name">Starter</div>
+        <div class="plan-desc">Phù hợp cho cá nhân và nhà đầu tư nhỏ lẻ</div>
+        <div class="plan-price">
+          <span class="price-num" style="color:var(--primary-light)">99K</span><span class="price-unit"> đ / tháng</span>
+        </div>
+        <ul class="plan-features">
+          <li><span class="check">✓</span> 1,000 requests / ngày</li>
+          <li><span class="check">✓</span> Lịch sử 30 ngày</li>
+          <li><span class="check">✓</span> 9 nguồn tin đầy đủ</li>
+          <li><span class="check">✓</span> Sentiment + Keyword analysis</li>
+          <li><span class="check">✓</span> Email support</li>
+          <li><span class="check">✓</span> API Key riêng</li>
+          <li><span class="x">–</span> Webhook notifications</li>
+        </ul>
+        <button class="plan-btn plan-btn-ghost" style="margin-top:24px;width:100%">Liên hệ tư vấn</button>
+      </div>
+
+      <!-- PRO -->
+      <div class="price-card popular">
+        <div class="popular-badge">Phổ biến nhất</div>
+        <div class="plan-name">Pro</div>
+        <div class="plan-desc">Cho quỹ đầu tư và team phân tích</div>
+        <div class="plan-price">
+          <span class="price-num" style="color:var(--accent)">299K</span><span class="price-unit"> đ / tháng</span>
+        </div>
+        <ul class="plan-features">
+          <li><span class="check">✓</span> 10,000 requests / ngày</li>
+          <li><span class="check">✓</span> Lịch sử không giới hạn</li>
+          <li><span class="check">✓</span> Toàn bộ 9+ nguồn tin</li>
+          <li><span class="check">✓</span> Sentiment học liên tục (feedback)</li>
+          <li><span class="check">✓</span> Webhook real-time alerts</li>
+          <li><span class="check">✓</span> Priority email + chat support</li>
+          <li><span class="check">✓</span> 99.5% uptime SLA</li>
+        </ul>
+        <button class="plan-btn plan-btn-primary" style="margin-top:24px;width:100%">Bắt đầu dùng thử 14 ngày</button>
+      </div>
+
+      <!-- ENTERPRISE -->
+      <div class="price-card">
+        <div class="plan-name">Enterprise</div>
+        <div class="plan-desc">Cho tổ chức và công ty chứng khoán</div>
+        <div class="plan-price">
+          <span class="price-num" style="font-size:28px">Liên hệ</span>
+        </div>
+        <ul class="plan-features">
+          <li><span class="check">✓</span> Unlimited requests</li>
+          <li><span class="check">✓</span> On-premise deployment</li>
+          <li><span class="check">✓</span> Custom news sources</li>
+          <li><span class="check">✓</span> White-label option</li>
+          <li><span class="check">✓</span> Dedicated support 24/7</li>
+          <li><span class="check">✓</span> 99.9% uptime SLA</li>
+          <li><span class="check">✓</span> Audit logs & compliance</li>
+        </ul>
+        <button class="plan-btn plan-btn-ghost" style="margin-top:24px;width:100%">Liên hệ ngay</button>
+      </div>
+    </div>
+
+    <!-- Comparison note -->
+    <div class="mt-8" style="background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:24px;text-align:center">
+      <p style="font-size:14px;color:var(--muted)">
+        🔒 <strong style="color:var(--text)">TradingAgents</strong> luôn miễn phí và open source theo giấy phép MIT.
+        Pricing ở trên chỉ áp dụng cho <strong style="color:var(--text)">TrendNews managed API</strong>.<br>
+        Không có hợp đồng dài hạn — hủy bất kỳ lúc nào.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- SOURCES SECTION -->
+<section id="sources">
+  <div class="container">
+    <div class="section-tag">📰 Nguồn tin</div>
+    <h2 class="mb-4">9+ nguồn tài chính Việt Nam hàng đầu</h2>
+    <p class="lead mb-8">Thu thập và chuẩn hóa tự động, cập nhật mỗi 15 phút.</p>
+    <div class="sources-grid">
+      <div class="source-chip"><span class="icon">📰</span><span class="name">CafeF</span><span class="type">Chứng khoán</span></div>
+      <div class="source-chip"><span class="icon">🌐</span><span class="name">VnExpress</span><span class="type">Tổng hợp</span></div>
+      <div class="source-chip"><span class="icon">💹</span><span class="name">TinNhanhCK</span><span class="type">Chứng khoán</span></div>
+      <div class="source-chip"><span class="icon">📊</span><span class="name">VnEconomy</span><span class="type">Kinh tế</span></div>
+      <div class="source-chip"><span class="icon">💰</span><span class="name">VietnamBiz</span><span class="type">Tài chính</span></div>
+      <div class="source-chip"><span class="icon">🏦</span><span class="name">BaoDauTu</span><span class="type">Đầu tư</span></div>
+      <div class="source-chip"><span class="icon">⏰</span><span class="name">Money24h</span><span class="type">Tài chính</span></div>
+      <div class="source-chip"><span class="icon">📱</span><span class="name">DanTri</span><span class="type">Tổng hợp</span></div>
+      <div class="source-chip"><span class="icon">🌏</span><span class="name">VietnamFinance</span><span class="type">Tài chính</span></div>
+    </div>
+
+    <div class="mt-8 features-grid">
+      <div class="feat-card">
+        <div class="feat-icon">🧠</div>
+        <h4>Sentiment AI tiếng Việt</h4>
+        <p>Lexicon chuyên biệt cho thị trường chứng khoán Việt Nam. Tự cải thiện qua feedback người dùng.</p>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">🔗</div>
+        <h4>Alpha Vantage Compatible</h4>
+        <p>Cùng format API với Alpha Vantage NEWS_SENTIMENT. Thay URL là dùng được ngay với TradingAgents.</p>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">🔍</div>
+        <h4>Tìm kiếm theo mã CK</h4>
+        <p>Nhập VCB, VIC, HPG — API tự động map sang alias (Vietcombank, Vingroup, Hòa Phát) để tìm tin liên quan.</p>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">📈</div>
+        <h4>Relevance Scoring</h4>
+        <p>Mỗi bài tin được chấm điểm mức độ liên quan (0-1). Lọc nhiễu, chỉ giữ lại tin thực sự quan trọng.</p>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">🗄️</div>
+        <h4>Lưu trữ SQLite / DB</h4>
+        <p>Toàn bộ dữ liệu lưu vào database. Truy vấn lịch sử, tổng hợp theo khoảng thời gian tùy ý.</p>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">🐳</div>
+        <h4>Docker Ready</h4>
+        <p>Một lệnh <code style="color:var(--secondary)">docker-compose up</code> là xong. Hỗ trợ cấu hình proxy cho môi trường doanh nghiệp.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- BLOG -->
+<section id="blog" style="background:var(--bg2)">
+  <div class="container">
+    <div class="section-tag">📝 Blog</div>
+    <h2 class="mb-4">Bài viết mới nhất</h2>
+    <p class="lead mb-8">Hướng dẫn, case study và góc nhìn về AI trong tài chính Việt Nam.</p>
+    <div class="blog-grid">
+      <div class="blog-card">
+        <div class="blog-thumb t1">🤖</div>
+        <div class="blog-body">
+          <div class="blog-meta">20 Feb 2026 · 8 phút đọc</div>
+          <div class="blog-title">Bắt đầu với TradingAgents: Phân tích VCB bằng Claude 4 Opus</div>
+          <div class="blog-excerpt">Hướng dẫn từng bước thiết lập TradingAgents với Anthropic Claude, tích hợp TrendNews API và chạy phân tích đầu tiên cho cổ phiếu VCB.</div>
+        </div>
+        <div class="blog-footer">
+          <div class="blog-tags">
+            <span class="tag tag-blue">Tutorial</span>
+            <span class="tag tag-purple">Claude</span>
+          </div>
+          <a href="#" class="read-more">Đọc thêm →</a>
+        </div>
+      </div>
+
+      <div class="blog-card">
+        <div class="blog-thumb t2">📡</div>
+        <div class="blog-body">
+          <div class="blog-meta">15 Feb 2026 · 6 phút đọc</div>
+          <div class="blog-title">TrendNews API: Thay Alpha Vantage bằng nguồn tin Việt Nam</div>
+          <div class="blog-excerpt">So sánh Alpha Vantage và TrendNews API. Cách chuyển đổi cấu hình TradingAgents để sử dụng nguồn tin địa phương với độ chính xác cao hơn.</div>
+        </div>
+        <div class="blog-footer">
+          <div class="blog-tags">
+            <span class="tag tag-cyan">API</span>
+            <span class="tag tag-green">Integration</span>
+          </div>
+          <a href="#" class="read-more">Đọc thêm →</a>
+        </div>
+      </div>
+
+      <div class="blog-card">
+        <div class="blog-thumb t3">📊</div>
+        <div class="blog-body">
+          <div class="blog-meta">10 Feb 2026 · 12 phút đọc</div>
+          <div class="blog-title">Sentiment Analysis tiếng Việt: Thách thức và giải pháp</div>
+          <div class="blog-excerpt">Phân tích tâm lý thị trường từ tin tức tiếng Việt khác gì so với tiếng Anh? Cách TrendNews xây dựng lexicon chuyên biệt và hệ thống học từ feedback.</div>
+        </div>
+        <div class="blog-footer">
+          <div class="blog-tags">
+            <span class="tag tag-purple">NLP</span>
+            <span class="tag tag-blue">Research</span>
+          </div>
+          <a href="#" class="read-more">Đọc thêm →</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-grid">
+    <div class="footer-brand">
+      <div class="logo">FinAI Suite</div>
+      <p>Bộ công cụ phân tích tài chính AI mã nguồn mở cho thị trường Việt Nam và toàn cầu.</p>
+      <div style="margin-top:16px;display:flex;gap:12px">
+        <a href="https://github.com/TauricResearch/TradingAgents" target="_blank" style="color:var(--muted);font-size:14px">GitHub</a>
+        <a href="#" style="color:var(--muted);font-size:14px">Discord</a>
+        <a href="#" style="color:var(--muted);font-size:14px">X / Twitter</a>
+      </div>
+    </div>
+    <div class="footer-col">
+      <h5>Sản phẩm</h5>
+      <ul>
+        <li><a href="#tradingagents-detail">TradingAgents</a></li>
+        <li><a href="#api">TrendNews API</a></li>
+        <li><a href="#pricing">Bảng giá</a></li>
+        <li><a href="#sources">Nguồn tin</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h5>Tài nguyên</h5>
+      <ul>
+        <li><a href="#api">API Documentation</a></li>
+        <li><a href="#blog">Blog</a></li>
+        <li><a href="https://arxiv.org/abs/2412.20138" target="_blank">arXiv Paper</a></li>
+        <li><a href="https://github.com/TauricResearch/TradingAgents" target="_blank">GitHub</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h5>Liên hệ</h5>
+      <ul>
+        <li><a href="#">Email hỗ trợ</a></li>
+        <li><a href="#">Discord community</a></li>
+        <li><a href="#">GitHub Issues</a></li>
+        <li><a href="#">Báo lỗi</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>© 2026 TauricResearch. MIT License.</span>
+    <span class="status-dot">Tất cả hệ thống hoạt động bình thường</span>
+  </div>
+</footer>
+
+<script>
+  function switchTab(btn, id) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + id).classList.add('active');
+  }
+
+  function copyCode(btn) {
+    const pre = btn.closest('.code-block').querySelector('pre');
+    const text = pre.textContent;
+    navigator.clipboard.writeText(text).then(() => {
+      btn.textContent = 'Đã sao chép!';
+      setTimeout(() => btn.textContent = 'Copy', 2000);
+    });
+  }
+
+  // Smooth scroll offset for sticky nav
+  document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', e => {
+      const target = document.querySelector(a.getAttribute('href'));
+      if (target) {
+        e.preventDefault();
+        const y = target.getBoundingClientRect().top + window.scrollY - 72;
+        window.scrollTo({ top: y, behavior: 'smooth' });
+      }
+    });
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+title: FinAI Suite — TradingAgents & TrendNews
+description: Multi-agent LLM trading framework và Vietnamese financial news API
+baseurl: ""
+url: ""
+
+theme: null
+
+# GitHub Pages config
+plugins: []
+
+# Exclude from build
+exclude:
+  - README.md
+  - Gemfile
+  - Gemfile.lock
