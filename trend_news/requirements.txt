@@ -11,6 +11,7 @@ lxml>=4.9.0
 # Sentiment analysis
 vaderSentiment>=3.3.2
 underthesea>=6.8.4
+snownlp>=0.12.3
 
 # Streamlit UI
 streamlit>=1.30.0

@@ -1,10 +1,13 @@
 """
-Sentiment analysis — Vietnamese (underthesea + lexicon) + English (VADER).
+Sentiment analysis — Vietnamese (underthesea + lexicon) + Chinese (SnowNLP) + English (VADER).
 
 Vietnamese pipeline:
   1. underthesea.sentiment() → "positive" | "negative"  (direction)
   2. _lexicon_score()        → float in [-1.0, 1.0]     (direction + magnitude)
   3. Combined float score in [-1.0, 1.0]
+
+Chinese pipeline:
+  SnowNLP.sentiments → P(positive) ∈ [0,1] → mapped to [-1,1]
 
 Fallback chain: underthesea → lexicon-only → (0.0, "Neutral")
 English: VADER → (0.0, "Neutral")
@@ -31,6 +34,32 @@ except ImportError:
     _vader_available = False
 
 # ---------------------------------------------------------------------------
+# ViVADER — Vietnamese VADER-inspired analyzer (local, zero external deps)
+# ---------------------------------------------------------------------------
+try:
+    from src.utils.vivader import ViVADERSentimentAnalyzer
+    _vivader = ViVADERSentimentAnalyzer()
+    _vivader_available = True
+except ImportError:
+    try:
+        from .vivader import ViVADERSentimentAnalyzer
+        _vivader = ViVADERSentimentAnalyzer()
+        _vivader_available = True
+    except ImportError:
+        _vivader = None  # type: ignore[assignment]
+        _vivader_available = False
+
+# ---------------------------------------------------------------------------
+# SnowNLP — Chinese sentiment (optional)
+# ---------------------------------------------------------------------------
+try:
+    from snownlp import SnowNLP as _SnowNLP
+    _snownlp_available = True
+except ImportError:
+    _SnowNLP = None  # type: ignore[assignment, misc]
+    _snownlp_available = False
+
+# ---------------------------------------------------------------------------
 # underthesea — Vietnamese sentiment direction (optional)
 # ---------------------------------------------------------------------------
 try:
@@ -52,6 +81,17 @@ _VI_UNIQUE_RE = re.compile(
 def _is_vietnamese(text: str) -> bool:
     """True nếu text chứa ký tự đặc trưng của tiếng Việt."""
     return bool(_VI_UNIQUE_RE.search(text))
+
+
+# ---------------------------------------------------------------------------
+# Chinese language detection — zero dependency, Unicode-based
+# ---------------------------------------------------------------------------
+_ZH_RE = re.compile(r'[\u4e00-\u9fff\u3400-\u4dbf]')
+
+
+def _is_chinese(text: str) -> bool:
+    """True if text contains CJK Unified Ideographs (Chinese)."""
+    return bool(_ZH_RE.search(text))
 
 
 # ---------------------------------------------------------------------------
@@ -376,46 +416,57 @@ def refresh_auto_learned_cache():
 
 
 # ---------------------------------------------------------------------------
-# Vietnamese scoring — underthesea direction + lexicon score (auto-learned)
+# Vietnamese scoring — ViVADER primary + underthesea fallback
 # ---------------------------------------------------------------------------
 def _score_vietnamese(text: str) -> float:
     """
-    Kết hợp underthesea (direction) và lexicon score.
-    Tự động sử dụng keywords từ keyword_suggestions (không cần manual approve).
+    Vietnamese sentiment via ViVADER (Vietnamese VADER-inspired rule-based analyzer).
+
+    Pipeline:
+      1. Merge auto-learned keywords into ViVADER extra_lexicon
+      2. ViVADER.polarity_scores(text)["compound"]   ← primary score
+      3. If compound == 0.0 (no lexicon match) → underthesea fallback ±0.35
+
+    ViVADER features vs old _lexicon_score():
+      - Token-based (not char-offset) → no partial-word false positives
+      - Additive BOOSTER_DICT (intensifiers/diminishers as scalars)
+      - 3-token negation window + double-negation handling
+      - "Nhưng/Tuy nhiên" contrastive conjunction weighting
+      - ALL CAPS amplification
+      - Punctuation amplifier (!, ?, ...)
+      - VADER-style normalize: x / sqrt(x² + 15)
     """
-    # Build merged lexicons: static + auto-learned (from keyword_suggestions)
+    # Build extra lexicon from auto-learned keywords (5-min TTL cache)
     auto_pos, auto_neg = _get_auto_learned_lexicons()
-    pos_lex = _VI_POS_LEXICON + auto_pos
-    neg_lex = _VI_NEG_LEXICON + auto_neg
+    extra_lexicon: List[Tuple[str, float]] = (
+        [(t, +w) for t, w in auto_pos] + [(t, -w) for t, w in auto_neg]
+    )
 
-    # Pure lexicon score (direction + magnitude)
-    lex_score = _lexicon_score(text, pos_lex, neg_lex)
+    # Use module-level instance when no extra terms (avoid repeated allocation)
+    if _vivader_available:
+        if extra_lexicon:
+            analyzer = ViVADERSentimentAnalyzer(extra_lexicon=extra_lexicon)
+        else:
+            analyzer = _vivader  # type: ignore[assignment]
+        compound = analyzer.polarity_scores(text[:512])["compound"]
+    else:
+        # Fallback to legacy _lexicon_score if ViVADER unavailable
+        pos_lex = _VI_POS_LEXICON + auto_pos
+        neg_lex = _VI_NEG_LEXICON + auto_neg
+        compound = _lexicon_score(text, pos_lex, neg_lex)
 
-    # Attempt underthesea for direction blending
-    if _uts_available:
+    # underthesea fallback — only when ViVADER finds zero lexicon signal
+    if compound == 0.0 and _uts_available:
         try:
             direction = _uts_sentiment(text[:512])  # "positive" | "negative"
-            if direction == "positive" and lex_score < 0:
-                # underthesea says positive but lexicon says negative → trust lexicon
-                pass
-            elif direction == "negative" and lex_score > 0:
-                # underthesea says negative but lexicon says positive → trust lexicon
-                pass
-            elif direction == "positive" and lex_score == 0.0:
-                # No lexicon match: use underthesea with moderate default
+            if direction == "positive":
                 return 0.35
-            elif direction == "negative" and lex_score == 0.0:
+            elif direction == "negative":
                 return -0.35
-            # Both agree or only underthesea available → blend
-            if lex_score != 0.0 and direction in ("positive", "negative"):
-                uts_sign = 1.0 if direction == "positive" else -1.0
-                # Weighted blend: 70% lexicon + 30% underthesea direction
-                blended = 0.7 * lex_score + 0.3 * uts_sign * 0.4
-                return max(-1.0, min(1.0, blended))
         except Exception:
             pass
 
-    return lex_score
+    return compound
 
 
 # ---------------------------------------------------------------------------
@@ -439,6 +490,9 @@ class SentimentAnalyzer:
         try:
             if _is_vietnamese(text):
                 compound = _score_vietnamese(text[:512])
+            elif _is_chinese(text) and _snownlp_available and _SnowNLP is not None:
+                raw = _SnowNLP(text[:512]).sentiments
+                compound = raw * 2.0 - 1.0
             elif _vader_available:
                 compound = float(_vader.polarity_scores(text[:512])["compound"])
             else:

@@ -153,7 +153,7 @@ Raw news query with more flexible filtering. Returns DB rows directly without Al
 curl "http://localhost:8000/api/v1/news?source=cafef&start_date=2026-02-15"
 
 # HPG news last 7 days
-curl "http://localhost:8000/api/v1/news?tickers=HPG&start_date=2026-02-08&end_date=2026-02-15&limit=20"
+curl "http://localhost:8000/api/v1/news?tickers=HPG&start_date=2026-01-08&end_date=2026-02-17&limit=20"
 
 # Combine: VIC news from vnexpress only
 curl "http://localhost:8000/api/v1/news?tickers=VIC&source=vnexpress-kinhdoanh"
