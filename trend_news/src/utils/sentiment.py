@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import math
 import re
-import time
 from typing import Dict, List, Optional, Tuple
 
 # ---------------------------------------------------------------------------
@@ -356,117 +355,22 @@ def _score_to_label(compound: float) -> str:
         return "Bullish"
 
 
-# ---------------------------------------------------------------------------
-# Auto-learned lexicon from keyword_suggestions cache (5 min TTL)
-# ---------------------------------------------------------------------------
-_auto_learned_cache: Optional[Tuple[List[Tuple[str, float]], List[Tuple[str, float]]]] = None
-_auto_learned_cache_ts: float = 0.0
-_AUTO_LEARNED_CACHE_TTL = 300.0  # 5 minutes
-
-
-def _get_auto_learned_lexicons() -> Tuple[List[Tuple[str, float]], List[Tuple[str, float]]]:
-    """
-    Load auto-aggregated lexicons from keyword_suggestions (no manual approval needed).
-    Returns (pos, neg) with auto-calculated weights based on frequency and consensus.
-    """
-    global _auto_learned_cache, _auto_learned_cache_ts
-    now = time.monotonic()
-    if _auto_learned_cache is not None and (now - _auto_learned_cache_ts) < _AUTO_LEARNED_CACHE_TTL:
-        return _auto_learned_cache
-
-    try:
-        from src.core.sentiment_learning import SentimentLearningManager
-        manager = SentimentLearningManager()
-        
-        # Get auto-aggregated keywords (frequency-based, no manual approval)
-        auto_keywords = manager.get_auto_aggregated_keywords(
-            min_confidence=0.3,   # Ngưỡng confidence
-            min_frequency=2,      # Xuất hiện ít nhất 2 lần
-            lookback_days=30      # Trong 30 ngày gần nhất
-        )
-        
-        pos: List[Tuple[str, float]] = []
-        neg: List[Tuple[str, float]] = []
-        
-        for term, weight in auto_keywords['positive'].items():
-            pos.append((term, weight))
-        for term, weight in auto_keywords['negative'].items():
-            neg.append((term, weight))
-        
-        # Sort by length (longest match wins)
-        pos.sort(key=lambda kv: -len(kv[0]))
-        neg.sort(key=lambda kv: -len(kv[0]))
-        
-        _auto_learned_cache = (pos, neg)
-        _auto_learned_cache_ts = now
-        return _auto_learned_cache
-    except Exception as e:
-        # Silent fail - return empty lists
-        _auto_learned_cache = ([], [])
-        _auto_learned_cache_ts = now
-        return _auto_learned_cache
-
-
-def refresh_auto_learned_cache():
-    """Force refresh auto-learned lexicon cache."""
-    global _auto_learned_cache, _auto_learned_cache_ts
-    _auto_learned_cache = None
-    _auto_learned_cache_ts = 0.0
+def refresh_auto_learned_cache() -> None:
+    """No-op stub — kept for backward compatibility with external imports."""
+    pass
 
 
 
 # ---------------------------------------------------------------------------
-# Vietnamese scoring — ViVADER primary + underthesea fallback
+# Vietnamese scoring — ViVADER only
 # ---------------------------------------------------------------------------
 def _score_vietnamese(text: str) -> float:
     """
     Vietnamese sentiment via ViVADER (Vietnamese VADER-inspired rule-based analyzer).
 
-    Pipeline:
-      1. Merge auto-learned keywords into ViVADER extra_lexicon
-      2. ViVADER.polarity_scores(text)["compound"]   ← primary score
-      3. If compound == 0.0 (no lexicon match) → underthesea fallback ±0.35
-
-    ViVADER features vs old _lexicon_score():
-      - Token-based (not char-offset) → no partial-word false positives
-      - Additive BOOSTER_DICT (intensifiers/diminishers as scalars)
-      - 3-token negation window + double-negation handling
-      - "Nhưng/Tuy nhiên" contrastive conjunction weighting
-      - ALL CAPS amplification
-      - Punctuation amplifier (!, ?, ...)
-      - VADER-style normalize: x / sqrt(x² + 15)
+    Returns compound score in [-1.0, 1.0].
     """
-    # Build extra lexicon from auto-learned keywords (5-min TTL cache)
-    auto_pos, auto_neg = _get_auto_learned_lexicons()
-    extra_lexicon: List[Tuple[str, float]] = (
-        [(t, +w) for t, w in auto_pos] + [(t, -w) for t, w in auto_neg]
-    )
-
-    # Use module-level instance when no extra terms (avoid repeated allocation)
-    if _vivader_available:
-        if extra_lexicon:
-            analyzer = ViVADERSentimentAnalyzer(extra_lexicon=extra_lexicon)
-        else:
-            analyzer = _vivader  # type: ignore[assignment]
-        compound = analyzer.polarity_scores(text[:512])["compound"]
-    else:
-        # Fallback to legacy _lexicon_score if ViVADER unavailable
-        pos_lex = _VI_POS_LEXICON + auto_pos
-        neg_lex = _VI_NEG_LEXICON + auto_neg
-        compound = _lexicon_score(text, pos_lex, neg_lex)
-
-    # underthesea fallback — only when ViVADER finds zero lexicon signal
-    if compound == 0.0 and _uts_available:
-        try:
-            direction = _uts_sentiment(text[:512])  # "positive" | "negative"
-            if direction == "positive":
-                return 0.35
-            elif direction == "negative":
-                return -0.35
-        except Exception:
-            pass
-
-    return compound
+    return _vivader.polarity_scores(text[:512])["compound"]
 
 
 # ---------------------------------------------------------------------------
