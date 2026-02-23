@@ -23,3 +23,8 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["mcp_server"]
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: integration tests requiring real API keys (deselect with -m 'not slow')",
+]
