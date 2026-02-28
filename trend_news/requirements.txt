@@ -22,3 +22,14 @@ pandas>=2.1.0
 langchain-core>=0.3.0
 langchain-openai>=0.2.0
 # langchain-anthropic>=0.3.0   # alternative: uncomment if using Anthropic
+
+# Knowledge Graph & RAG
+cognee>=0.5.0
+kuzu>=0.8.0
+mem0ai>=0.1.0
+chainlit>=2.0.0
+langgraph>=0.2.0
+
+# Testing
+pytest>=8.0.0
+pytest-asyncio>=0.24.0

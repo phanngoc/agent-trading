@@ -130,3 +130,7 @@ def setup_cognee_paths() -> None:
     """
     os.environ.setdefault("SYSTEM_ROOT_DIRECTORY", COGNEE_DB_PATH)
     os.environ.setdefault("DATA_ROOT_DIRECTORY", str(Path(COGNEE_DB_PATH) / "data_storage"))
+    
+    # Note: Cognee 0.5.x stores Kuzu graph in .pkl file (pickle serialization)
+    # The actual graph DB is at: databases/{uuid}/{uuid}.pkl
+    # Kuzu folder is NOT used in this version

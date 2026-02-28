@@ -9,6 +9,11 @@ dependencies = [
     "PyYAML>=6.0.3,<7.0.0",
     "fastmcp>=2.12.0,<2.14.0",
     "websockets>=13.0,<14.0",
+    "cognee>=0.5.0",
+    "kuzu>=0.8.0",
+    "mem0ai>=0.1.0",
+    "chainlit>=2.0.0",
+    "langgraph>=0.2.0",
 ]
 
 [project.scripts]
@@ -25,6 +30,8 @@ build-backend = "hatchling.build"
 packages = ["mcp_server"]
 
 [tool.pytest.ini_options]
+asyncio_mode = "auto"
 markers = [
     "slow: integration tests requiring real API keys (deselect with -m 'not slow')",
+    "integration: real API + real DB integration tests (deselect with -m 'not integration')",
 ]
