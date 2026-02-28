@@ -144,7 +144,13 @@ def parse_mem0_results(results: List[Dict]) -> Dict[str, Any]:
 def parse_cognee_results(cognee_output: Any) -> List[Dict]:
     """
     Normalize Cognee search results to the same dict schema as news_articles rows.
-    Cognee returns various formats depending on SearchType; we handle text + dicts.
+
+    Cognee 0.5.x returns a list of result objects. Each object has:
+        .search_result — either:
+            List[dict]  for CHUNKS    → each dict has 'text' (article text)
+            List[str]   for GRAPH_COMPLETION / RAG_COMPLETION → narrative strings
+
+    Legacy / plain string formats are also handled.
     """
     articles = []
     if not cognee_output:
@@ -153,29 +159,68 @@ def parse_cognee_results(cognee_output: Any) -> List[Dict]:
     items = cognee_output if isinstance(cognee_output, list) else [cognee_output]
 
     for item in items:
+        # --- Case 1: plain string (legacy) ---
         if isinstance(item, str):
-            # Plain text chunk — extract fields from our structured format
             article = _parse_structured_text(item)
             if article:
                 articles.append(article)
-        elif isinstance(item, dict):
-            # Already dict-like
-            articles.append({
-                "title": item.get("text", item.get("title", str(item)[:200])),
-                "source_id": item.get("source_id", "cognee"),
-                "url": item.get("url", ""),
-                "crawled_at": item.get("crawled_at", ""),
-                "sentiment_score": item.get("sentiment_score"),
-                "sentiment_label": item.get("sentiment_label"),
-            })
+            elif len(item.strip()) > 20:
+                articles.append(_make_narrative_article(item))
+
+        # --- Case 2: Cognee 0.5.x result object with search_result ---
         else:
-            # Fallback: use string representation
-            text = str(item)
-            article = _parse_structured_text(text)
-            if article:
-                articles.append(article)
+            # Supports both dict-with-key and object-with-attribute
+            if isinstance(item, dict):
+                sr = item.get("search_result")
+            elif hasattr(item, "search_result"):
+                sr = item.search_result
+            else:
+                sr = None
+
+            if sr is not None:
+                chunks = sr if isinstance(sr, list) else [sr]
+                for chunk in chunks:
+                    if isinstance(chunk, dict):
+                        # CHUNKS format: dict with 'text' key containing article text
+                        text = chunk.get("text") or chunk.get("content", "")
+                        if text:
+                            parsed = _parse_structured_text(str(text))
+                            articles.append(parsed if parsed else _make_narrative_article(str(text)))
+                    elif isinstance(chunk, str) and chunk.strip():
+                        # GRAPH_COMPLETION / RAG_COMPLETION: narrative string
+                        parsed = _parse_structured_text(chunk)
+                        articles.append(parsed if parsed else _make_narrative_article(chunk))
+
+            # --- Case 3: plain dict without search_result ---
+            elif isinstance(item, dict):
+                text = item.get("text") or item.get("title", "")
+                if text:
+                    parsed = _parse_structured_text(str(text))
+                    if parsed:
+                        articles.append(parsed)
+                    else:
+                        articles.append({
+                            "title": str(text)[:400],
+                            "source_id": item.get("source_id", "cognee"),
+                            "url": item.get("url", ""),
+                            "crawled_at": item.get("crawled_at", ""),
+                            "sentiment_score": item.get("sentiment_score"),
+                            "sentiment_label": item.get("sentiment_label"),
+                        })
 
     return articles
+
+
+def _make_narrative_article(text: str) -> Dict:
+    """Wrap a plain narrative string into the standard article dict schema."""
+    return {
+        "title": text.strip()[:400],
+        "source_id": "cognee",
+        "url": "",
+        "crawled_at": "",
+        "sentiment_score": None,
+        "sentiment_label": None,
+    }
 
 
 def _parse_structured_text(text: str) -> Dict | None:
