@@ -104,6 +104,51 @@ def format_news_for_prompt(articles: List[Dict], max_items: int = 10) -> str:
     return "\n".join(lines)
 
 
+def format_detailed_news_for_prompt(articles: List[Dict], max_items: int = 5) -> str:
+    """
+    Format ranked news articles WITH full fetched content into a rich LLM prompt string.
+    Falls back to title + summary if full_content is absent.
+    """
+    if not articles:
+        return "Không có tin tức nào."
+
+    from chatbot.prompts import SENTIMENT_ICONS
+
+    MAX_CONTENT_CHARS = 1500  # per article — keeps total tokens manageable
+
+    blocks = []
+    for i, article in enumerate(articles[:max_items], 1):
+        label = article.get("sentiment_label") or "Neutral"
+        icon = SENTIMENT_ICONS.get(label, "⚪")
+        crawled_at = article.get("crawled_at") or article.get("crawl_date") or ""
+        if "T" in str(crawled_at):
+            crawled_at = crawled_at[:16].replace("T", " ")
+        url = article.get("url") or article.get("mobile_url") or ""
+        title = article.get("title", "")
+        source = article.get("source_id", "unknown")
+        full_content: str = article.get("full_content", "")
+        summary: str = article.get("summary") or article.get("description") or ""
+
+        content_section = ""
+        if full_content:
+            snippet = full_content[:MAX_CONTENT_CHARS]
+            if len(full_content) > MAX_CONTENT_CHARS:
+                snippet += "…"
+            content_section = f"  NỘI DUNG:\n{snippet}"
+        elif summary:
+            content_section = f"  TÓM TẮT: {summary[:400]}"
+
+        block = (
+            f"[{i}] {icon} {title}\n"
+            f"  Nguồn: {source} | Thời gian: {crawled_at} | Cảm xúc: {label}\n"
+            f"  Link: {url}\n"
+            f"{content_section}"
+        )
+        blocks.append(block)
+
+    return "\n\n---\n\n".join(blocks)
+
+
 def parse_mem0_results(results: List[Dict]) -> Dict[str, Any]:
     """
     Parse mem0 search results into a structured preferences dict.

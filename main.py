@@ -24,6 +24,7 @@ config = DEFAULT_CONFIG.copy()
 config["deep_think_llm"] = "gpt-5-mini"  # Use a different model
 config["quick_think_llm"] = "gpt-5-mini"  # Use a different model
 config["max_debate_rounds"] = 1  # Increase debate rounds
+config["max_recur_limit"] = 200  # Increase recursion limit for complex analyses
 
 # Configure data vendors
 config["data_vendors"] = {

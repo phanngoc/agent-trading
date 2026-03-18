@@ -5,6 +5,7 @@ from tradingagents.agents.utils.agent_utils import get_fundamentals, get_balance
 from tradingagents.dataflows.config import get_config
 
 
+
 def create_fundamentals_analyst(llm):
     def fundamentals_analyst_node(state):
         current_date = state["trade_date"]

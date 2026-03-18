@@ -36,10 +36,11 @@ from chatbot.config import (
     COGNEE_DB_PATH,
     setup_cognee_paths,
 )
-from chatbot.prompts import SYSTEM_PROMPT, NO_NEWS_MESSAGE, COGNEE_GRAPH_SYSTEM_PROMPT
+from chatbot.prompts import SYSTEM_PROMPT, DETAILED_SYSTEM_PROMPT, NO_NEWS_MESSAGE, COGNEE_GRAPH_SYSTEM_PROMPT
 from chatbot.utils import (
     extract_tickers_from_query,
     format_news_for_prompt,
+    format_detailed_news_for_prompt,
     parse_cognee_results,
     parse_mem0_results,
 )
@@ -51,6 +52,17 @@ from chatbot.utils import (
 
 _memory = None
 _llm = None
+
+# Serialize all cognee calls — Kuzu DB only supports one writer at a time.
+# Using asyncio.Lock() prevents concurrent requests inside the same event loop
+# from fighting over the .pkl lock file.
+_cognee_lock = asyncio.Lock()
+
+# Set cognee / embedding env vars once at module load (before any import cognee).
+# setup_cognee_paths() is idempotent (uses setdefault) so calling it here is safe.
+setup_cognee_paths()
+for _k, _v in COGNEE_EMBEDDING_ENV.items():
+    os.environ.setdefault(_k, _v)
 
 
 def _get_memory():
@@ -142,15 +154,18 @@ async def _run_cognee_search(query: str) -> tuple:
 
     Returns (raw_news: List[Dict], graph_response: Optional[str]):
     - If cognee returns a narrative string → graph_response is set, raw_news=[]
-    - On timeout / error / empty → graph_response=None, raw_news=[]
+    - On timeout / error / database-lock error / empty → graph_response=None, raw_news=[]
       (triggers SQLite fallback downstream)
     """
+    # Acquire per-process lock — prevents two concurrent requests from trying
+    # to open the same KuzuDB .pkl file simultaneously (which causes a lock error).
     try:
-        # Path env vars must be set before importing cognee (pydantic-settings reads at import)
-        setup_cognee_paths()
-        for key, value in COGNEE_EMBEDDING_ENV.items():
-            os.environ.setdefault(key, value)
+        await asyncio.wait_for(_cognee_lock.acquire(), timeout=5.0)
+    except asyncio.TimeoutError:
+        print("[Agent] Cognee busy (lock wait timeout 5s) — falling back to SQLite")
+        return [], None
 
+    try:
         import cognee
         from cognee.api.v1.search import SearchType
 
@@ -183,11 +198,19 @@ async def _run_cognee_search(query: str) -> tuple:
         return [], None
 
     except asyncio.TimeoutError:
-        print("[Agent] Cognee GRAPH_COMPLETION timed out (20s) — falling back to SQLite")
+        print("[Agent] Cognee GRAPH_COMPLETION timed out (25s) — falling back to SQLite")
         return [], None
     except Exception as exc:
-        print(f"[Agent] Cognee search error (fallback to SQLite): {exc}")
+        exc_str = str(exc)
+        # KuzuDB file lock: another process or thread holds the .pkl lock.
+        # Fail fast — no point waiting; SQLite fallback is immediate.
+        if "Could not set lock on file" in exc_str or "IO exception" in exc_str:
+            print("[Agent] Cognee DB locked by another process — falling back to SQLite")
+        else:
+            print(f"[Agent] Cognee search error (fallback to SQLite): {exc}")
         return [], None
+    finally:
+        _cognee_lock.release()
 
 
 # ---------------------------------------------------------------------------
@@ -311,12 +334,36 @@ def rank_and_filter(state: ChatbotState) -> ChatbotState:
 
 
 # ---------------------------------------------------------------------------
+# Node: fetch_article_details
+# ---------------------------------------------------------------------------
+
+
+async def fetch_article_details(state: ChatbotState) -> ChatbotState:
+    """
+    Concurrently fetch full article text for up to 5 articles using the
+    3-layer extraction waterfall in article_fetcher:
+      1. Site-specific CSS selector (per source_id domain)
+      2. trafilatura universal extraction
+      3. <p>-tag heuristic fallback
+    Results are cached in-process to avoid duplicate fetches.
+    """
+    from chatbot.article_fetcher import fetch_articles_batch
+
+    articles = await fetch_articles_batch(
+        list(state["ranked_news"]),
+        max_fetch=5,
+        max_concurrent=3,
+    )
+    return {**state, "ranked_news": articles}
+
+
+# ---------------------------------------------------------------------------
 # Node: generate_response
 # ---------------------------------------------------------------------------
 
 
 async def generate_response(state: ChatbotState) -> ChatbotState:
-    """Generate a Vietnamese natural-language response with the LLM."""
+    """Generate a Vietnamese natural-language response using full article content."""
     from langchain_core.messages import HumanMessage, SystemMessage
 
     ranked = state["ranked_news"]
@@ -326,11 +373,19 @@ async def generate_response(state: ChatbotState) -> ChatbotState:
         response = NO_NEWS_MESSAGE.format(query=state["query"])
         return {**state, "response": response}
 
-    news_context = format_news_for_prompt(ranked)
+    # Use detailed format if any article has full_content, otherwise fall back to summary format
+    has_full_content = any(a.get("full_content") for a in ranked)
+    if has_full_content:
+        news_context = format_detailed_news_for_prompt(ranked)
+        prompt_template = DETAILED_SYSTEM_PROMPT
+    else:
+        news_context = format_news_for_prompt(ranked)
+        prompt_template = SYSTEM_PROMPT
+
     memories = prefs.get("raw_memories", [])
     prefs_summary = "\n".join(f"- {m}" for m in memories[:5]) if memories else "Chưa có thông tin sở thích."
 
-    system_content = SYSTEM_PROMPT.format(
+    system_content = prompt_template.format(
         date=datetime.now().strftime("%d/%m/%Y %H:%M"),
         user_prefs=prefs_summary,
         news_context=news_context,
@@ -342,11 +397,11 @@ async def generate_response(state: ChatbotState) -> ChatbotState:
             llm.ainvoke(
                 [SystemMessage(content=system_content), HumanMessage(content=state["query"])]
             ),
-            timeout=25.0,
+            timeout=35.0,
         )
         response = ai_msg.content
     except asyncio.TimeoutError:
-        print("[Agent] generate_response LLM timed out (25s) — returning formatted news")
+        print("[Agent] generate_response LLM timed out (35s) — returning formatted news")
         response = f"Đây là những tin tức liên quan:\n\n{news_context}"
     except Exception as exc:
         print(f"[Agent] LLM error: {exc}")
@@ -405,6 +460,7 @@ def create_agent_graph():
     graph.add_node("retrieve_and_query", retrieve_and_query)
     graph.add_node("sqlite_fallback", sqlite_fallback)
     graph.add_node("rank_and_filter", rank_and_filter)
+    graph.add_node("fetch_article_details", fetch_article_details)
     graph.add_node("direct_response", direct_response)
     graph.add_node("generate_response", generate_response)
     graph.add_node("update_preferences", update_preferences)
@@ -412,7 +468,8 @@ def create_agent_graph():
     graph.set_entry_point("retrieve_and_query")
     graph.add_conditional_edges("retrieve_and_query", _route_after_search)
     graph.add_edge("sqlite_fallback", "rank_and_filter")
-    graph.add_edge("rank_and_filter", "generate_response")
+    graph.add_edge("rank_and_filter", "fetch_article_details")
+    graph.add_edge("fetch_article_details", "generate_response")
     graph.add_edge("direct_response", "update_preferences")
     graph.add_edge("generate_response", "update_preferences")
     graph.add_edge("update_preferences", END)

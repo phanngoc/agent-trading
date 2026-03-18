@@ -3,7 +3,7 @@ from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import yfinance as yf
 import os
-from .stockstats_utils import StockstatsUtils
+from .stockstats_utils import StockstatsUtils, _clean_dataframe
 
 def get_YFin_data_online(
     symbol: Annotated[str, "ticker symbol of the company"],
@@ -35,6 +35,11 @@ def get_YFin_data_online(
     for col in numeric_columns:
         if col in data.columns:
             data[col] = data[col].round(2)
+
+    # Cap output to last 90 trading days to avoid oversized LLM payloads
+    MAX_ROWS = 90
+    if len(data) > MAX_ROWS:
+        data = data.tail(MAX_ROWS)
 
     # Convert DataFrame to CSV string
     csv_string = data.to_csv()
@@ -135,6 +140,8 @@ def get_stock_stats_indicators_window(
 
     end_date = curr_date
     curr_date_dt = datetime.strptime(curr_date, "%Y-%m-%d")
+    # Cap lookback to 30 days to avoid oversized LLM payloads
+    look_back_days = min(look_back_days, 30)
     before = curr_date_dt - relativedelta(days=look_back_days)
 
     # Optimized: Get stock data once and calculate indicators for all dates
@@ -232,8 +239,8 @@ def _get_stock_stats_bulk(
         )
         
         if os.path.exists(data_file):
-            data = pd.read_csv(data_file)
-            data["Date"] = pd.to_datetime(data["Date"])
+            data = pd.read_csv(data_file, on_bad_lines="skip")
+            data["Date"] = pd.to_datetime(data["Date"], errors="coerce")
         else:
             data = yf.download(
                 symbol,
@@ -245,7 +252,8 @@ def _get_stock_stats_bulk(
             )
             data = data.reset_index()
             data.to_csv(data_file, index=False)
-        
+
+        data = _clean_dataframe(data)
         df = wrap(data)
         df["Date"] = df["Date"].dt.strftime("%Y-%m-%d")
     

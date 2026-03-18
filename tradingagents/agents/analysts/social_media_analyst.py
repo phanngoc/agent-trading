@@ -5,6 +5,7 @@ from tradingagents.agents.utils.agent_utils import get_news
 from tradingagents.dataflows.config import get_config
 
 
+
 def create_social_media_analyst(llm):
     def social_media_analyst_node(state):
         current_date = state["trade_date"]

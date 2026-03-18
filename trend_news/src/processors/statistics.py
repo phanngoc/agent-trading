@@ -1,6 +1,32 @@
+import re
 from typing import List, Dict, Optional, Tuple
 from src.config import CONFIG
 from src.utils import is_first_crawl_today, format_time_display
+
+
+def _keyword_matches(keyword: str, text: str) -> bool:
+    """
+    Match keyword against text with word-boundary awareness for ASCII keywords.
+
+    ASCII-only keywords (e.g. "AI", "LLM", "GPT") use Unicode word-boundary
+    lookarounds so that they do NOT match as substrings inside Vietnamese words
+    like "sai", "hai", "trai", "đai", "triển khai", etc.
+
+    Non-ASCII keywords (Chinese, Japanese, …) fall back to simple substring
+    matching because those scripts don't use inter-word spaces.
+    """
+    keyword_lower = keyword.lower()
+    text_lower = text.lower()
+
+    if keyword.isascii():
+        # Require the keyword to not be immediately preceded or followed by
+        # a Unicode word character (\w covers letters, digits, underscore in
+        # all scripts including Vietnamese accented letters and CJK ideographs).
+        pattern = r'(?<!\w)' + re.escape(keyword_lower) + r'(?!\w)'
+        return bool(re.search(pattern, text_lower))
+
+    # Non-ASCII keyword: simple substring match
+    return keyword_lower in text_lower
 
 
 def matches_word_groups(
@@ -17,10 +43,8 @@ def matches_word_groups(
     if not word_groups:
         return True
 
-    title_lower = title.lower()
-
     # Kiểm tra từ lọc
-    if any(filter_word.lower() in title_lower for filter_word in filter_words):
+    if any(_keyword_matches(filter_word, title) for filter_word in filter_words):
         return False
 
     # Kiểm tra khớp nhóm từ
@@ -31,7 +55,7 @@ def matches_word_groups(
         # Kiểm tra từ bắt buộc
         if required_words:
             all_required_present = all(
-                req_word.lower() in title_lower for req_word in required_words
+                _keyword_matches(req_word, title) for req_word in required_words
             )
             if not all_required_present:
                 continue
@@ -39,7 +63,7 @@ def matches_word_groups(
         # Kiểm tra từ thông thường
         if normal_words:
             any_normal_present = any(
-                normal_word.lower() in title_lower for normal_word in normal_words
+                _keyword_matches(normal_word, title) for normal_word in normal_words
             )
             if not any_normal_present:
                 continue
@@ -167,7 +191,6 @@ def count_word_frequency(
             source_mobile_url = title_data.get("mobileUrl", "")
 
             # Tìm nhóm từ khớp（chuyển đổi phòng thủ đảm bảo an toàn kiểu）
-            title_lower = str(title).lower() if not isinstance(title, str) else title.lower()
             for group in word_groups:
                 required_words = group["required"]
                 normal_words = group["normal"]
@@ -182,7 +205,7 @@ def count_word_frequency(
                     # Logic khớp ban đầu
                     if required_words:
                         all_required_present = all(
-                            req_word.lower() in title_lower
+                            _keyword_matches(req_word, title)
                             for req_word in required_words
                         )
                         if not all_required_present:
@@ -190,7 +213,7 @@ def count_word_frequency(
 
                     if normal_words:
                         any_normal_present = any(
-                            normal_word.lower() in title_lower
+                            _keyword_matches(normal_word, title)
                             for normal_word in normal_words
                         )
                         if not any_normal_present:

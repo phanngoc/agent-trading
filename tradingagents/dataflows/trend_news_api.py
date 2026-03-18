@@ -35,7 +35,7 @@ def _build_vn_ticker_map() -> dict:
             result[f"{ticker}.VN"] = aliases
             result[ticker] = aliases
         return result
-    except ImportError:
+    except (ImportError, FileNotFoundError, Exception):
         # Minimal fallback
         return {
             "VIC.VN": ["Vingroup", "VIC"], "VIC": ["Vingroup", "VIC"],

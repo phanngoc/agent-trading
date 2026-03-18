@@ -26,6 +26,11 @@ dependencies = [
 
     # Utilities
     "python-dotenv>=1.0.0",
+    # HTTP client + article extraction
+    "aiohttp>=3.9.0",
+    "trafilatura>=1.12.0",
+    "beautifulsoup4>=4.12.0",
+    "lxml>=4.9.0",
 ]
 
 [project.optional-dependencies]
