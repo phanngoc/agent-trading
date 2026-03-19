@@ -115,9 +115,9 @@ _VI_POSITIVE: Dict[str, float] = {
     "ưu thế": 0.5, "thắng lợi": 0.65,
 
     # Tăng trưởng / doanh thu / lợi nhuận
-    "tăng trưởng mạnh": 0.7, "tăng trưởng": 0.25, "tăng trưởng tốt": 0.55,
+    "tăng trưởng mạnh": 0.7, "tăng trưởng": 0.35, "tăng trưởng tốt": 0.55,
     "lãi ròng tăng": 0.7, "doanh thu tăng": 0.65, "lợi nhuận tăng": 0.7,
-    "lợi nhuận cao kỷ lục": 0.85, "lãi": 0.20,
+    "lợi nhuận cao kỷ lục": 0.85, "lãi": 0.30,
 
     # Cổ tức / chia thưởng
     "chia cổ tức": 0.25, "tăng cổ tức": 0.65, "thưởng cổ phiếu": 0.45,
@@ -280,7 +280,7 @@ _VI_NEGATIVE: Dict[str, float] = {
     "giá xăng tăng": 0.45, "giá điện tăng": 0.45, "chi phí tăng vọt": 0.55,
 
     # ── Không đạt / chưa đạt ─────────────────────────────────────────────────
-    "chưa đạt kế hoạch": 0.6, "không đạt kế hoạch": 0.6,
+    "chưa đạt kế hoạch": 0.70, "không đạt kế hoạch": 0.70,
     "thấp hơn kế hoạch": 0.55, "dưới kỳ vọng": 0.5,
 
     # ── Tâm lý tiêu cực ──────────────────────────────────────────────────────
