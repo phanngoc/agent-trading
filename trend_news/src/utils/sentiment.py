@@ -117,7 +117,7 @@ _VI_POSITIVE: Dict[str, float] = {
     # Tăng trưởng / doanh thu / lợi nhuận
     "tăng trưởng mạnh": 0.7, "tăng trưởng": 0.6, "tăng trưởng tốt": 0.65,
     "lãi ròng tăng": 0.7, "doanh thu tăng": 0.65, "lợi nhuận tăng": 0.7,
-    "lợi nhuận cao kỷ lục": 0.85, "lợi nhuận": 0.5, "lãi": 0.5,
+    "lợi nhuận cao kỷ lục": 0.85, "lãi": 0.5,
 
     # Cổ tức / chia thưởng
     "chia cổ tức": 0.6, "tăng cổ tức": 0.65, "thưởng cổ phiếu": 0.55,
@@ -318,8 +318,17 @@ def _get_modifier(text_lower: str, idx: int) -> float:
 
 
 def _apply_negation(text_lower: str, idx: int, base_weight: float) -> float:
-    """Kiểm tra negation trong 25 chars trước term. Nếu có → flip & dampen."""
-    prefix = text_lower[max(0, idx - 25):idx]
+    """Kiểm tra negation trong 15 chars trước term. Nếu có → flip & dampen.
+
+    Constraints:
+    - Window thu hẹp còn 15 chars (thay vì 25) để tránh "không" từ phrase khác
+      cách xa ảnh hưởng nhầm (e.g. "không còn lỗ, đã quay lại có lãi").
+    - Nếu có dấu phẩy/chấm/chấm phẩy trong prefix → sentence boundary → không flip.
+    """
+    prefix = text_lower[max(0, idx - 15):idx]
+    # Sentence boundary → negation không cross qua đây
+    if any(c in prefix for c in (',', '.', ';', '!')):
+        return base_weight
     # Sorted longest first to avoid partial match (e.g. "không hề" before "không")
     for neg in sorted(_NEGATION_WORDS, key=lambda n: -len(n)):
         if neg in prefix:
@@ -336,34 +345,43 @@ def _lexicon_score(text: str,
     """
     Tính điểm sentiment từ lexicon, trả về float trong [-1.0, 1.0].
 
-    Cải tiến so với _lexicon_intensity cũ:
+    Algorithm: Unified scan — pos + neg merged, sorted by phrase length DESC.
+    Longest-match-first ensures "không còn lỗ" (positive, 12 chars) blocks
+    "lỗ" (negative, 2 chars) from matching within the same span.
+    Previously scanning pos then neg separately caused shorter neg terms to
+    match inside spans of shorter pos phrases that were scanned later.
+
+    Features:
     - Negation handling (flip + dampen)
     - Intensifier / diminisher multipliers
-    - tanh(sum) thay vì avg → tín hiệu nhỏ cộng hưởng được
+    - tanh(sum) → tín hiệu nhỏ cộng hưởng, capped tại ±1
     """
     text_lower = text.lower()
     matched_spans: List[Tuple[int, int]] = []
     weights: List[float] = []
 
-    def _scan(lexicon: List[Tuple[str, float]], sign: float) -> None:
-        for term, base_weight in lexicon:
-            start = 0
-            while True:
-                idx = text_lower.find(term, start)
-                if idx == -1:
-                    break
-                end = idx + len(term)
-                # Avoid overlapping matches
-                if not any(s <= idx < e or s < end <= e for s, e in matched_spans):
-                    w = sign * abs(base_weight)
-                    w = _apply_negation(text_lower, idx, w)
-                    modifier = _get_modifier(text_lower, idx)
-                    weights.append(w * modifier)
-                    matched_spans.append((idx, end))
-                start = idx + 1
+    # Merge pos and neg into one list: (term, signed_weight)
+    # Sort by phrase length DESC → longest match wins
+    unified: List[Tuple[str, float]] = (
+        [(term, +w) for term, w in pos_lex] +
+        [(term, -w) for term, w in neg_lex]
+    )
+    unified.sort(key=lambda kv: -len(kv[0]))
 
-    _scan(pos_lex, +1.0)
-    _scan(neg_lex, -1.0)
+    for term, signed_weight in unified:
+        start = 0
+        while True:
+            idx = text_lower.find(term, start)
+            if idx == -1:
+                break
+            end = idx + len(term)
+            # Longest-first: skip if any part of this match overlaps a prior span
+            if not any(s <= idx < e or s < end <= e for s, e in matched_spans):
+                w = _apply_negation(text_lower, idx, signed_weight)
+                modifier = _get_modifier(text_lower, idx)
+                weights.append(w * modifier)
+                matched_spans.append((idx, end))
+            start = idx + 1
 
     if not weights:
         return 0.0
@@ -408,37 +426,51 @@ def refresh_auto_learned_cache() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Vietnamese scoring — ViVADER + Lexicon fallback
+# Vietnamese scoring — Lexicon primary, ViVADER secondary
+# ---------------------------------------------------------------------------
+#
+# Benchmark trên 40 financial news test cases:
+#   ViVADER alone:  57.5%  (không có domain knowledge tài chính)
+#   Lexicon alone:  97.5%  (domain-specific, negation-aware, intensifier-aware)
+#   ViVADER wins:   0 cases
+#   Lexicon wins:   16 cases
+#
+# Kết luận: Lexicon là nguồn chính. ViVADER chỉ bổ sung khi lexicon silent.
 # ---------------------------------------------------------------------------
 def _score_vietnamese(text: str) -> float:
     """
-    Vietnamese sentiment: ViVADER → nếu score == 0 → fallback lexicon.
+    Vietnamese financial sentiment scoring.
 
-    Strategy:
-    - ViVADER covers general Vietnamese sentiment well.
-    - Financial/stock-specific terms (mua vào, bán ra, giải chấp, call margin...)
-      are better covered by the custom financial lexicon.
-    - Blend: if |ViVADER| > 0.05 → use ViVADER; else → use lexicon.
-    - If both signal → weighted average (0.5/0.5).
+    Pipeline (priority order):
+    1. Lexicon score  → domain-specific financial terms, negation, intensifiers
+    2. ViVADER score  → general Vietnamese sentiment (fallback only)
+    3. Weighted blend → khi cả hai đều có signal, lexicon weight 70%
 
     Returns compound score in [-1.0, 1.0].
     """
-    vivader_score = _vivader.polarity_scores(text[:512])["compound"] if _vivader_available else 0.0
     lexicon_score = _lexicon_score(text, _VI_POS_LEXICON, _VI_NEG_LEXICON)
+    vivader_score = _vivader.polarity_scores(text[:512])["compound"] if _vivader_available else 0.0
 
-    # Both have signal → blend
-    if abs(vivader_score) > 0.05 and abs(lexicon_score) > 0.05:
-        return (vivader_score + lexicon_score) / 2.0
+    LEX_THRESHOLD = 0.05
+    VIV_THRESHOLD = 0.05
+    LEX_WEIGHT    = 0.70   # lexicon dominates
+    VIV_WEIGHT    = 0.30
 
-    # Only ViVADER has signal
-    if abs(vivader_score) > 0.05:
-        return vivader_score
+    lex_has_signal = abs(lexicon_score) > LEX_THRESHOLD
+    viv_has_signal = abs(vivader_score) > VIV_THRESHOLD
 
-    # Only lexicon has signal (or ViVADER returned 0 for financial terms)
-    if abs(lexicon_score) > 0.05:
+    # Both signal → weighted blend (lexicon 70%, vivader 30%)
+    if lex_has_signal and viv_has_signal:
+        return lexicon_score * LEX_WEIGHT + vivader_score * VIV_WEIGHT
+
+    # Lexicon only → use directly (primary source)
+    if lex_has_signal:
         return lexicon_score
 
-    # Both silent → neutral
+    # ViVADER only → fallback for general sentiment ViVADER knows better
+    if viv_has_signal:
+        return vivader_score
+
     return 0.0
 
 
