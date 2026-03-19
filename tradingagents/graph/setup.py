@@ -52,38 +52,20 @@ class GraphSetup:
         if len(selected_analysts) == 0:
             raise ValueError("Trading Agents Graph Setup Error: no analysts selected!")
 
-        # Create analyst nodes
+        # Create analyst nodes (self-contained ReAct loops — no tool nodes needed)
         analyst_nodes = {}
-        delete_nodes = {}
-        tool_nodes = {}
 
         if "market" in selected_analysts:
-            analyst_nodes["market"] = create_market_analyst(
-                self.quick_thinking_llm
-            )
-            delete_nodes["market"] = create_msg_delete()
-            tool_nodes["market"] = self.tool_nodes["market"]
+            analyst_nodes["market"] = create_market_analyst(self.quick_thinking_llm)
 
         if "social" in selected_analysts:
-            analyst_nodes["social"] = create_social_media_analyst(
-                self.quick_thinking_llm
-            )
-            delete_nodes["social"] = create_msg_delete()
-            tool_nodes["social"] = self.tool_nodes["social"]
+            analyst_nodes["social"] = create_social_media_analyst(self.quick_thinking_llm)
 
         if "news" in selected_analysts:
-            analyst_nodes["news"] = create_news_analyst(
-                self.quick_thinking_llm
-            )
-            delete_nodes["news"] = create_msg_delete()
-            tool_nodes["news"] = self.tool_nodes["news"]
+            analyst_nodes["news"] = create_news_analyst(self.quick_thinking_llm)
 
         if "fundamentals" in selected_analysts:
-            analyst_nodes["fundamentals"] = create_fundamentals_analyst(
-                self.quick_thinking_llm
-            )
-            delete_nodes["fundamentals"] = create_msg_delete()
-            tool_nodes["fundamentals"] = self.tool_nodes["fundamentals"]
+            analyst_nodes["fundamentals"] = create_fundamentals_analyst(self.quick_thinking_llm)
 
         # Create researcher and manager nodes
         bull_researcher_node = create_bull_researcher(
@@ -109,12 +91,9 @@ class GraphSetup:
         workflow = StateGraph(AgentState)
 
         # Add analyst nodes to the graph
+        # Analysts now use isolated ReAct loops (analyst_runner.py) — no tool nodes needed
         for analyst_type, node in analyst_nodes.items():
             workflow.add_node(f"{analyst_type.capitalize()} Analyst", node)
-            workflow.add_node(
-                f"Msg Clear {analyst_type.capitalize()}", delete_nodes[analyst_type]
-            )
-            workflow.add_node(f"tools_{analyst_type}", tool_nodes[analyst_type])
 
         # Add other nodes
         workflow.add_node("Bull Researcher", bull_researcher_node)
@@ -131,26 +110,16 @@ class GraphSetup:
         first_analyst = selected_analysts[0]
         workflow.add_edge(START, f"{first_analyst.capitalize()} Analyst")
 
-        # Connect analysts in sequence
+        # Connect analysts in sequence (direct edges — no tool/clear nodes needed)
         for i, analyst_type in enumerate(selected_analysts):
             current_analyst = f"{analyst_type.capitalize()} Analyst"
-            current_tools = f"tools_{analyst_type}"
-            current_clear = f"Msg Clear {analyst_type.capitalize()}"
 
-            # Add conditional edges for current analyst
-            workflow.add_conditional_edges(
-                current_analyst,
-                getattr(self.conditional_logic, f"should_continue_{analyst_type}"),
-                [current_tools, current_clear],
-            )
-            workflow.add_edge(current_tools, current_analyst)
-
-            # Connect to next analyst or to Bull Researcher if this is the last analyst
+            # Connect to next analyst or Bull Researcher if this is the last analyst
             if i < len(selected_analysts) - 1:
                 next_analyst = f"{selected_analysts[i+1].capitalize()} Analyst"
-                workflow.add_edge(current_clear, next_analyst)
+                workflow.add_edge(current_analyst, next_analyst)
             else:
-                workflow.add_edge(current_clear, "Bull Researcher")
+                workflow.add_edge(current_analyst, "Bull Researcher")
 
         # Add remaining edges
         workflow.add_conditional_edges(

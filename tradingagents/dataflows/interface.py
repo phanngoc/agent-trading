@@ -1,4 +1,5 @@
 from typing import Annotated
+import re
 
 # Import from vendor-specific modules
 from .y_finance import (
@@ -25,8 +26,24 @@ from .alpha_vantage import (
 )
 from .alpha_vantage_common import AlphaVantageRateLimitError
 
+# vnstock provider for Vietnamese stocks
+from .vnstock_api import (
+    get_stock_data as get_vnstock_stock_data,
+    get_indicators as get_vnstock_indicators,
+    get_fundamentals as get_vnstock_fundamentals,
+    get_balance_sheet as get_vnstock_balance_sheet,
+    get_cashflow as get_vnstock_cashflow,
+    get_income_statement as get_vnstock_income_statement,
+    get_insider_transactions as get_vnstock_insider_transactions,
+    get_news as get_vnstock_news,
+    is_vn_ticker,
+)
+
 # Configuration and routing logic
 from .config import get_config
+
+# VN ticker pattern: 2-4 uppercase letters, optionally ending in .VN
+_VN_TICKER_RE = re.compile(r'^[A-Z]{2,3}(\.VN)?$')
 
 # Tools organized by category
 TOOLS_CATEGORIES = {
@@ -65,39 +82,47 @@ VENDOR_LIST = [
     "yfinance",
     "alpha_vantage",
     "trend_news",
+    "vnstock",
 ]
 
 # Mapping of methods to their vendor-specific implementations
 VENDOR_METHODS = {
     # core_stock_apis
     "get_stock_data": {
+        "vnstock": get_vnstock_stock_data,
         "alpha_vantage": get_alpha_vantage_stock,
         "yfinance": get_YFin_data_online,
     },
     # technical_indicators
     "get_indicators": {
+        "vnstock": get_vnstock_indicators,
         "alpha_vantage": get_alpha_vantage_indicator,
         "yfinance": get_stock_stats_indicators_window,
     },
     # fundamental_data
     "get_fundamentals": {
+        "vnstock": get_vnstock_fundamentals,
         "alpha_vantage": get_alpha_vantage_fundamentals,
         "yfinance": get_yfinance_fundamentals,
     },
     "get_balance_sheet": {
+        "vnstock": get_vnstock_balance_sheet,
         "alpha_vantage": get_alpha_vantage_balance_sheet,
         "yfinance": get_yfinance_balance_sheet,
     },
     "get_cashflow": {
+        "vnstock": get_vnstock_cashflow,
         "alpha_vantage": get_alpha_vantage_cashflow,
         "yfinance": get_yfinance_cashflow,
     },
     "get_income_statement": {
+        "vnstock": get_vnstock_income_statement,
         "alpha_vantage": get_alpha_vantage_income_statement,
         "yfinance": get_yfinance_income_statement,
     },
     # news_data
     "get_news": {
+        "vnstock": get_vnstock_news,
         "alpha_vantage": get_alpha_vantage_news,
         "yfinance": get_news_yfinance,
         "trend_news": get_trend_news,
@@ -108,6 +133,7 @@ VENDOR_METHODS = {
         "trend_news": get_trend_global_news,
     },
     "get_insider_transactions": {
+        "vnstock": get_vnstock_insider_transactions,
         "alpha_vantage": get_alpha_vantage_insider_transactions,
         "yfinance": get_yfinance_insider_transactions,
     },
@@ -136,13 +162,23 @@ def get_vendor(category: str, method: str = None) -> str:
     return config.get("data_vendors", {}).get(category, "default")
 
 def route_to_vendor(method: str, *args, **kwargs):
-    """Route method calls to appropriate vendor implementation with fallback support."""
+    """Route method calls to appropriate vendor implementation with fallback support.
+
+    Auto-detection: if the first positional arg (ticker/symbol) looks like a VN stock
+    (2-4 uppercase letters, optionally ending in .VN), vnstock is injected at the front
+    of the vendor chain regardless of config.
+    """
     category = get_category_for_method(method)
     vendor_config = get_vendor(category, method)
     primary_vendors = [v.strip() for v in vendor_config.split(',')]
 
     if method not in VENDOR_METHODS:
         raise ValueError(f"Method '{method}' not supported")
+
+    # Auto-detect VN tickers and prepend vnstock
+    if args and isinstance(args[0], str) and is_vn_ticker(args[0]):
+        if "vnstock" in VENDOR_METHODS[method] and "vnstock" not in primary_vendors:
+            primary_vendors = ["vnstock"] + primary_vendors
 
     # Build fallback chain: primary vendors first, then remaining available vendors
     all_available_vendors = list(VENDOR_METHODS[method].keys())

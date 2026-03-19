@@ -18,7 +18,7 @@ DEFAULT_CONFIG = {
     # Debate and discussion settings
     "max_debate_rounds": 1,
     "max_risk_discuss_rounds": 1,
-    "max_recur_limit": 100,
+    "max_recur_limit": 300,
     # Data vendor configuration
     # Category-level configuration (default for all tools in category)
     "data_vendors": {

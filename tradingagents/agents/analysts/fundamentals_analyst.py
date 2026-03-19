@@ -1,63 +1,57 @@
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-import time
-import json
-from tradingagents.agents.utils.agent_utils import get_fundamentals, get_balance_sheet, get_cashflow, get_income_statement, get_insider_transactions
-from tradingagents.dataflows.config import get_config
+from tradingagents.agents.utils.agent_utils import (
+    get_fundamentals,
+    get_balance_sheet,
+    get_cashflow,
+    get_income_statement,
+)
+from tradingagents.agents.utils.analyst_runner import run_analyst_loop
 
+
+SYSTEM_PROMPT = """You are a fundamentals analyst tasked with analyzing a company's financial health.
+
+Available tools:
+- get_fundamentals: Company overview, ratios, key metrics
+- get_balance_sheet: Assets, liabilities, equity
+- get_income_statement: Revenue, profit, margins
+- get_cashflow: Cash flow from operations, investing, financing
+
+Instructions:
+1. Call get_fundamentals first for the overview.
+2. Then call get_income_statement and get_balance_sheet for detail.
+3. Analyze financial strength, growth trends, and key ratios.
+4. Write a comprehensive report covering:
+   - Revenue and profitability trends
+   - Balance sheet health (debt, liquidity)
+   - Key financial ratios (P/E, ROE, debt/equity)
+   - Any red flags or strengths
+5. Append a Markdown table with key financial metrics."""
 
 
 def create_fundamentals_analyst(llm):
+    tools = [get_fundamentals, get_balance_sheet, get_cashflow, get_income_statement]
+
     def fundamentals_analyst_node(state):
-        current_date = state["trade_date"]
         ticker = state["company_of_interest"]
-        company_name = state["company_of_interest"]
+        current_date = state["trade_date"]
 
-        tools = [
-            get_fundamentals,
-            get_balance_sheet,
-            get_cashflow,
-            get_income_statement,
-        ]
-
-        system_message = (
-            "You are a researcher tasked with analyzing fundamental information over the past week about a company. Please write a comprehensive report of the company's fundamental information such as financial documents, company profile, basic company financials, and company financial history to gain a full view of the company's fundamental information to inform traders. Make sure to include as much detail as possible. Do not simply state the trends are mixed, provide detailed and finegrained analysis and insights that may help traders make decisions."
-            + " Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read."
-            + " Use the available tools: `get_fundamentals` for comprehensive company analysis, `get_balance_sheet`, `get_cashflow`, and `get_income_statement` for specific financial statements.",
+        prompt = (
+            f"Analyze the fundamental financials for {ticker} as of {current_date}. "
+            f"Available tools: {', '.join(t.name for t in tools)}.\n\n"
+            f"{SYSTEM_PROMPT}"
         )
 
-        prompt = ChatPromptTemplate.from_messages(
-            [
-                (
-                    "system",
-                    "You are a helpful AI assistant, collaborating with other assistants."
-                    " Use the provided tools to progress towards answering the question."
-                    " If you are unable to fully answer, that's OK; another assistant with different tools"
-                    " will help where you left off. Execute what you can to make progress."
-                    " If you or any other assistant has the FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL** or deliverable,"
-                    " prefix your response with FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL** so the team knows to stop."
-                    " You have access to the following tools: {tool_names}.\n{system_message}"
-                    "For your reference, the current date is {current_date}. The company we want to look at is {ticker}",
-                ),
-                MessagesPlaceholder(variable_name="messages"),
-            ]
+        class _Chain:
+            def invoke(self, messages):
+                return llm.bind_tools(tools).invoke(messages)
+
+        report = run_analyst_loop(
+            chain=_Chain(),
+            tools=tools,
+            initial_prompt=prompt,
         )
-
-        prompt = prompt.partial(system_message=system_message)
-        prompt = prompt.partial(tool_names=", ".join([tool.name for tool in tools]))
-        prompt = prompt.partial(current_date=current_date)
-        prompt = prompt.partial(ticker=ticker)
-
-        chain = prompt | llm.bind_tools(tools)
-
-        result = chain.invoke(state["messages"])
-
-        report = ""
-
-        if len(result.tool_calls) == 0:
-            report = result.content
 
         return {
-            "messages": [result],
+            "messages": [],
             "fundamentals_report": report,
         }
 
