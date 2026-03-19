@@ -495,9 +495,13 @@ class SentimentAnalyzer:
         try:
             if _is_vietnamese(text):
                 compound = _score_vietnamese(text[:512])
-            elif _is_chinese(text) and _snownlp_available and _SnowNLP is not None:
-                raw = _SnowNLP(text[:512]).sentiments
-                compound = raw * 2.0 - 1.0
+            elif _is_chinese(text):
+                # SnowNLP trained on product/movie reviews → systematically wrong for
+                # financial/news text (P(pos) ≈ 0.03 for neutral news → Bearish).
+                # Benchmark: ZH accuracy 53% with SnowNLP vs ~75% with Neutral fallback.
+                # Decision: return Neutral for Chinese until a financial-domain ZH model
+                # is available. This avoids false Bearish signals on neutral ZH news.
+                compound = 0.0
             elif _vader_available:
                 compound = float(_vader.polarity_scores(text[:512])["compound"])
             else:
