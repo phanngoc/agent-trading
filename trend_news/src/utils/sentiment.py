@@ -104,7 +104,7 @@ _VI_POSITIVE: Dict[str, float] = {
 
     # Tăng trưởng mạnh
     "tăng mạnh": 0.8, "bứt phá": 0.75, "đột phá": 0.75, "bullish": 0.7,
-    "tăng vọt": 0.75, "tăng đột biến": 0.75, "leo thang tích cực": 0.65,
+    "tăng đột biến": 0.75, "leo thang tích cực": 0.65,
 
     # Phục hồi / khởi sắc
     "phục hồi mạnh": 0.7, "phục hồi": 0.6, "khởi sắc": 0.6,
@@ -153,6 +153,23 @@ _VI_POSITIVE: Dict[str, float] = {
 
     # Đỉnh cao
     "đỉnh": 0.5, "đỉnh lịch sử": 0.75, "cao nhất": 0.6, "cao kỷ lục": 0.75,
+
+    # ── Giao dịch cổ đông / dòng vốn TÍCH CỰC ──────────────────────────────
+    "mua vào": 0.55, "mua ròng": 0.55, "mua vào mạnh": 0.65,
+    "đăng ký mua": 0.55, "đăng ký mua vào": 0.6,
+    "tích lũy cổ phiếu": 0.55, "tích lũy": 0.45,
+    "mua thêm": 0.5, "gom cổ phiếu": 0.5, "gom hàng": 0.45,
+    "ngoại mua": 0.55, "nhà đầu tư nước ngoài mua": 0.6,
+    "dòng tiền vào mạnh": 0.65,
+
+    # ── Nới room / chính sách hỗ trợ ────────────────────────────────────────
+    "nâng room ngoại": 0.6, "nâng room": 0.55,
+    "hạ lãi suất": 0.6, "giảm lãi suất": 0.55,
+    "hỗ trợ tăng trưởng": 0.5, "kích thích kinh tế": 0.5,
+
+    # ── Phục hồi doanh thu / lợi nhuận ──────────────────────────────────────
+    "không còn lỗ": 0.7, "thoát lỗ": 0.75, "quay lại có lãi": 0.85, "có lãi trở lại": 0.75,
+    "lãi trở lại": 0.7, "đã có lãi": 0.65, "cải thiện lợi nhuận": 0.55,
 }
 
 _VI_NEGATIVE: Dict[str, float] = {
@@ -222,6 +239,35 @@ _VI_NEGATIVE: Dict[str, float] = {
     # Từ khóa giảm / khó / xấu
     "giảm": 0.4, "khó khăn": 0.4, "không phanh": 0.35,
     "bán ròng": 0.4, "đỏ": 0.35,
+
+    # ── Giao dịch cổ đông / dòng vốn TIÊU CỰC ──────────────────────────────
+    "bán ra": 0.5, "bán ròng liên tục": 0.65, "bán tháo cổ phiếu": 0.65,
+    "thoái vốn": 0.6, "rút vốn khỏi": 0.6, "rút khỏi": 0.5,
+    "không còn là cổ đông lớn": 0.65, "giảm sở hữu": 0.5,
+    "ngoại bán ròng": 0.55, "nhà đầu tư nước ngoài bán": 0.55,
+
+    # ── Margin call / giải chấp ──────────────────────────────────────────────
+    "giải chấp": 0.65, "call margin": 0.7, "bị call margin": 0.7,
+    "margin call": 0.7, "bán giải chấp": 0.7,
+    "áp lực bán gia tăng": 0.55, "áp lực giải chấp": 0.65,
+
+    # ── Thất bại / không đạt ─────────────────────────────────────────────────
+    "thất bại": 0.55, "không đạt kế hoạch": 0.55, "chưa đạt": 0.4,
+    "không đạt được thỏa thuận": 0.55, "đàm phán thất bại": 0.6,
+    "thương vụ thất bại": 0.6,
+
+    # ── Lạm phát / vĩ mô tiêu cực ────────────────────────────────────────────
+    "lạm phát tăng": 0.5, "lạm phát tăng vọt": 0.85,
+    "lạm phát": 0.4,
+    "lãi suất tăng": 0.5, "thắt chặt tiền tệ": 0.55,
+
+    # ── Không đạt / chưa đạt ─────────────────────────────────────────────────
+    "chưa đạt kế hoạch": 0.6, "không đạt kế hoạch": 0.6,
+    "thấp hơn kế hoạch": 0.55, "dưới kỳ vọng": 0.5,
+
+    # ── Tâm lý tiêu cực ──────────────────────────────────────────────────────
+    "hoảng loạn bán ra": 0.7, "đỏ sàn toàn diện": 0.65,
+    "nhà đầu tư hoảng loạn": 0.6,
 }
 
 # Pre-sort descending by phrase length (longest match wins)
@@ -362,15 +408,38 @@ def refresh_auto_learned_cache() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Vietnamese scoring — ViVADER only
+# Vietnamese scoring — ViVADER + Lexicon fallback
 # ---------------------------------------------------------------------------
 def _score_vietnamese(text: str) -> float:
     """
-    Vietnamese sentiment via ViVADER (Vietnamese VADER-inspired rule-based analyzer).
+    Vietnamese sentiment: ViVADER → nếu score == 0 → fallback lexicon.
+
+    Strategy:
+    - ViVADER covers general Vietnamese sentiment well.
+    - Financial/stock-specific terms (mua vào, bán ra, giải chấp, call margin...)
+      are better covered by the custom financial lexicon.
+    - Blend: if |ViVADER| > 0.05 → use ViVADER; else → use lexicon.
+    - If both signal → weighted average (0.5/0.5).
 
     Returns compound score in [-1.0, 1.0].
     """
-    return _vivader.polarity_scores(text[:512])["compound"]
+    vivader_score = _vivader.polarity_scores(text[:512])["compound"] if _vivader_available else 0.0
+    lexicon_score = _lexicon_score(text, _VI_POS_LEXICON, _VI_NEG_LEXICON)
+
+    # Both have signal → blend
+    if abs(vivader_score) > 0.05 and abs(lexicon_score) > 0.05:
+        return (vivader_score + lexicon_score) / 2.0
+
+    # Only ViVADER has signal
+    if abs(vivader_score) > 0.05:
+        return vivader_score
+
+    # Only lexicon has signal (or ViVADER returned 0 for financial terms)
+    if abs(lexicon_score) > 0.05:
+        return lexicon_score
+
+    # Both silent → neutral
+    return 0.0
 
 
 # ---------------------------------------------------------------------------
