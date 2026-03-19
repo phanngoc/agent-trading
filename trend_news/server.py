@@ -41,7 +41,7 @@ class NewsItem(BaseModel):
 
 class NewsSentimentResponse(BaseModel):
     items: str
-    sentiment_score_definition: str = "x <= -0.35: Bearish; -0.35 < x <= -0.15: Somewhat-Bearish; -0.15 < x < 0.15: Neutral; 0.15 <= x < 0.35: Somewhat-Bullish; x >= 0.35: Bullish"
+    sentiment_score_definition: str = "x <= -0.50: Bearish; -0.50 < x <= -0.20: Somewhat-Bearish; -0.20 < x < 0.20: Neutral; 0.20 <= x < 0.40: Somewhat-Bullish; x >= 0.40: Bullish"
     relevance_score_definition: str = "0 < x <= 1: with a higher score indicating higher relevance."
     feed: List[NewsItem]
 

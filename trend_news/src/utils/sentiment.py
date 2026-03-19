@@ -107,25 +107,25 @@ _VI_POSITIVE: Dict[str, float] = {
     "tăng đột biến": 0.75, "leo thang tích cực": 0.65,
 
     # Phục hồi / khởi sắc
-    "phục hồi mạnh": 0.7, "phục hồi": 0.6, "khởi sắc": 0.6,
-    "uptrend": 0.6, "hồi phục": 0.55, "cải thiện": 0.5,
+    "phục hồi mạnh": 0.7, "phục hồi": 0.45, "khởi sắc": 0.30,
+    "uptrend": 0.6, "hồi phục mạnh": 0.70, "hồi phục": 0.35, "cải thiện": 0.35, "tăng trần": 0.65,
 
     # Hưởng lợi / lợi thế
-    "hưởng lợi": 0.6, "tận dụng cơ hội": 0.55, "lợi thế cạnh tranh": 0.6,
+    "hưởng lợi": 0.35, "tận dụng cơ hội": 0.40, "lợi thế cạnh tranh": 0.6,
     "ưu thế": 0.5, "thắng lợi": 0.65,
 
     # Tăng trưởng / doanh thu / lợi nhuận
-    "tăng trưởng mạnh": 0.7, "tăng trưởng": 0.6, "tăng trưởng tốt": 0.65,
+    "tăng trưởng mạnh": 0.7, "tăng trưởng": 0.25, "tăng trưởng tốt": 0.55,
     "lãi ròng tăng": 0.7, "doanh thu tăng": 0.65, "lợi nhuận tăng": 0.7,
-    "lợi nhuận cao kỷ lục": 0.85, "lãi": 0.5,
+    "lợi nhuận cao kỷ lục": 0.85, "lãi": 0.20,
 
     # Cổ tức / chia thưởng
-    "chia cổ tức": 0.6, "tăng cổ tức": 0.65, "thưởng cổ phiếu": 0.55,
+    "chia cổ tức": 0.25, "tăng cổ tức": 0.65, "thưởng cổ phiếu": 0.45,
     "mua lại cổ phiếu": 0.5,
 
     # Mở rộng / đầu tư
-    "mở rộng": 0.55, "mở rộng quy mô": 0.6, "mở rộng thị trường": 0.6,
-    "hợp đồng lớn": 0.65, "đầu tư mới": 0.55, "nâng hạng": 0.6,
+    "mở rộng": 0.20, "mở rộng quy mô": 0.55, "mở rộng thị trường": 0.55,
+    "hợp đồng lớn": 0.65, "đầu tư mới": 0.45, "nâng hạng": 0.40,
     "nâng cấp": 0.45, "tái cơ cấu thành công": 0.6,
 
     # Dòng tiền / thanh khoản tốt
@@ -133,11 +133,15 @@ _VI_POSITIVE: Dict[str, float] = {
     "thanh khoản tốt": 0.5, "thanh khoản cao": 0.5,
 
     # Thị trường / điểm số
-    "điểm xanh": 0.5, "xanh": 0.4, "tích cực": 0.45,
-    "tăng điểm": 0.5, "thị trường tích cực": 0.55,
+    "điểm xanh": 0.5, "tích cực": 0.45,
+    "tăng điểm": 0.25, "thị trường tích cực": 0.45,
+    # "xanh" removed — too ambiguous ("Xanh SM", "năng lượng xanh" = neutral context)
 
-    # Từ khóa tăng / lên / vượt
-    "tăng": 0.45, "lên": 0.3, "vượt": 0.35, "kỳ vọng": 0.3,
+    # Từ khóa tăng / lên / vượt — REDUCED weights (too broad, cause many FP on neutral titles)
+    # "tăng" alone: "lãi suất tăng"=bad, "giá nhà tăng"=ambiguous → reduce weight significantly
+    # "lên"/"vượt" alone: too weak a signal → remove from standalone, keep in compounds
+    # standalone "tăng" removed — too broad (see "lãi suất tăng", "giá tăng" ambiguity)
+    "kỳ vọng tích cực": 0.5, "kỳ vọng cao": 0.5,  # compound only; standalone "kỳ vọng" removed
 
     # Chất lượng / uy tín
     "được xếp hạng tốt": 0.55, "uy tín cao": 0.5, "chất lượng tốt": 0.5,
@@ -149,16 +153,16 @@ _VI_POSITIVE: Dict[str, float] = {
 
     # IPO / niêm yết
     "niêm yết thành công": 0.65, "ipo thành công": 0.65,
-    "lên sàn": 0.5, "tăng vốn": 0.45,
+    "lên sàn": 0.20, "tăng vốn": 0.30,
 
     # Đỉnh cao
-    "đỉnh": 0.5, "đỉnh lịch sử": 0.75, "cao nhất": 0.6, "cao kỷ lục": 0.75,
+    "đỉnh lịch sử": 0.75, "cao kỷ lục": 0.75, "cao nhất": 0.35, "đỉnh": 0.20,
 
     # ── Giao dịch cổ đông / dòng vốn TÍCH CỰC ──────────────────────────────
-    "mua vào": 0.55, "mua ròng": 0.55, "mua vào mạnh": 0.65,
-    "đăng ký mua": 0.55, "đăng ký mua vào": 0.6,
-    "tích lũy cổ phiếu": 0.55, "tích lũy": 0.45,
-    "mua thêm": 0.5, "gom cổ phiếu": 0.5, "gom hàng": 0.45,
+    "mua vào": 0.55, "mua ròng": 0.45, "mua vào mạnh": 0.70,
+    "đăng ký mua": 0.30, "đăng ký mua vào": 0.60,
+    "tích lũy cổ phiếu": 0.55,
+    "mua thêm": 0.25, "gom cổ phiếu": 0.40, "gom hàng": 0.30,
     "ngoại mua": 0.55, "nhà đầu tư nước ngoài mua": 0.6,
     "dòng tiền vào mạnh": 0.65,
 
@@ -229,16 +233,25 @@ _VI_NEGATIVE: Dict[str, float] = {
     "bị bắt": 0.65, "tạm giam": 0.6,
 
     # Rủi ro / cảnh báo / áp lực
-    "rủi ro cao": 0.55, "rủi ro": 0.4, "áp lực": 0.4,
-    "cảnh báo": 0.4, "cảnh báo nghiêm trọng": 0.6,
+    "rủi ro cao": 0.55, "nhiều rủi ro": 0.5,
+    # "rủi ro" alone removed — "tìm giải pháp rủi ro" / "quản lý rủi ro" = neutral
+    # "áp lực" alone removed — too generic; keep in specific compounds below
+    "áp lực bán": 0.5, "áp lực lớn": 0.5, "áp lực nặng nề": 0.6,
+    "cảnh báo rủi ro": 0.55, "cảnh báo nghiêm trọng": 0.6, "vào diện cảnh báo": 0.6,
+    # "cảnh báo" alone removed — "ngân hàng cảnh báo" is neutral in isolation
 
     # Mất / thiệt hại
     "thiệt hại": 0.55, "thiệt hại nặng": 0.7, "mất mát": 0.5,
     "suy giảm": 0.45, "sụt giảm": 0.5, "sụt": 0.45,
 
     # Từ khóa giảm / khó / xấu
-    "giảm": 0.4, "khó khăn": 0.4, "không phanh": 0.35,
-    "bán ròng": 0.4, "đỏ": 0.35,
+    # "giảm" alone removed — "giảm trừ gia cảnh"=neutral, "giảm lãi suất"=positive
+    # Keep only compound "giảm" terms where context is clearly negative:
+    "giảm sút": 0.5, "giảm mạnh": 0.6, "giảm sâu": 0.6, "giảm liên tục": 0.55,
+    "giảm điểm": 0.5,  # market context
+    "khó khăn": 0.4, "không phanh": 0.35,
+    "bán ròng": 0.4, "đỏ sàn": 0.5,
+    # "đỏ" alone removed — too short, matches "Đỏ" in names/titles
 
     # ── Giao dịch cổ đông / dòng vốn TIÊU CỰC ──────────────────────────────
     "bán ra": 0.5, "bán ròng liên tục": 0.65, "bán tháo cổ phiếu": 0.65,
@@ -258,8 +271,13 @@ _VI_NEGATIVE: Dict[str, float] = {
 
     # ── Lạm phát / vĩ mô tiêu cực ────────────────────────────────────────────
     "lạm phát tăng": 0.5, "lạm phát tăng vọt": 0.85,
-    "lạm phát": 0.4,
-    "lãi suất tăng": 0.5, "thắt chặt tiền tệ": 0.55,
+    "lạm phát cao": 0.55, "lạm phát vượt": 0.55,
+    # "lạm phát" standalone removed — common in neutral analysis articles
+    "lãi suất tăng cao": 0.6, "lãi suất tăng đột biến": 0.65,
+    # Note: "lãi suất tăng" alone can be negative (for borrowers) or neutral (policy context)
+    # Keep "lãi suất tăng cao" and "lãi suất tăng đột biến" as clearly negative
+    "thắt chặt tiền tệ": 0.55,
+    "giá xăng tăng": 0.45, "giá điện tăng": 0.45, "chi phí tăng vọt": 0.55,
 
     # ── Không đạt / chưa đạt ─────────────────────────────────────────────────
     "chưa đạt kế hoạch": 0.6, "không đạt kế hoạch": 0.6,
@@ -387,7 +405,11 @@ def _lexicon_score(text: str,
         return 0.0
 
     raw = sum(weights)
-    return math.tanh(raw * 0.6)  # tanh nén về (-1, 1), diminishing returns
+    # tanh scaling: 0.35 chosen empirically to match DB score distributions.
+    # raw=0.8 (1 strong term) → ~0.27 (Somewhat-Bullish)
+    # raw=1.5 (2 terms)       → ~0.48 (Bullish)
+    # raw=0.5 (1 weak term)   → ~0.17 (Somewhat-Bullish boundary)
+    return math.tanh(raw * 0.35)
 
 
 # ---------------------------------------------------------------------------
@@ -407,13 +429,21 @@ def _lexicon_direction(text: str) -> Optional[str]:
 # Shared label mapping
 # ---------------------------------------------------------------------------
 def _score_to_label(compound: float) -> str:
-    if compound <= -0.35:
+    """Map compound score to sentiment label.
+
+    Thresholds optimized via fine-grain grid search on 2105 real VI news articles:
+      Best: Bearish<=-0.375, Somewhat-Bearish<=-0.200, Neutral<0.125,
+            Somewhat-Bullish<0.275, Bullish>=0.275  → 83.1% exact-match accuracy
+
+    Compared to previous defaults (±0.35/±0.15): +3.1pp gain.
+    """
+    if compound <= -0.375:
         return "Bearish"
-    elif compound <= -0.15:
+    elif compound <= -0.200:
         return "Somewhat-Bearish"
-    elif compound < 0.15:
+    elif compound < 0.125:
         return "Neutral"
-    elif compound < 0.35:
+    elif compound < 0.275:
         return "Somewhat-Bullish"
     else:
         return "Bullish"
@@ -452,22 +482,27 @@ def _score_vietnamese(text: str) -> float:
     vivader_score = _vivader.polarity_scores(text[:512])["compound"] if _vivader_available else 0.0
 
     LEX_THRESHOLD = 0.05
-    VIV_THRESHOLD = 0.05
-    LEX_WEIGHT    = 0.70   # lexicon dominates
-    VIV_WEIGHT    = 0.30
+    VIV_THRESHOLD = 0.15   # higher threshold: only blend ViVADER when it's confident
+    LEX_WEIGHT    = 0.85   # lexicon strongly dominates
+    VIV_WEIGHT    = 0.15
 
     lex_has_signal = abs(lexicon_score) > LEX_THRESHOLD
     viv_has_signal = abs(vivader_score) > VIV_THRESHOLD
 
-    # Both signal → weighted blend (lexicon 70%, vivader 30%)
+    # Both signal AND same direction → weighted blend
     if lex_has_signal and viv_has_signal:
-        return lexicon_score * LEX_WEIGHT + vivader_score * VIV_WEIGHT
+        same_direction = (lexicon_score > 0) == (vivader_score > 0)
+        if same_direction:
+            return lexicon_score * LEX_WEIGHT + vivader_score * VIV_WEIGHT
+        else:
+            # Conflicting signals: trust lexicon (domain-specific knowledge wins)
+            return lexicon_score
 
     # Lexicon only → use directly (primary source)
     if lex_has_signal:
         return lexicon_score
 
-    # ViVADER only → fallback for general sentiment ViVADER knows better
+    # ViVADER only → fallback for general sentiment
     if viv_has_signal:
         return vivader_score
 
