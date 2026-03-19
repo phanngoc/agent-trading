@@ -242,6 +242,25 @@ _VI_POSITIVE: Dict[str, float] = {
     # ── Phục hồi doanh thu / lợi nhuận ──────────────────────────────────────
     "không còn lỗ": 0.7, "thoát lỗ": 0.75, "quay lại có lãi": 0.85, "có lãi trở lại": 0.75,
     "lãi trở lại": 0.7, "đã có lãi": 0.65, "cải thiện lợi nhuận": 0.55,
+
+    # ── Tăng vọt / bứt phá nhanh ────────────────────────────────────────────
+    "tăng vọt": 0.70, "tăng tốc": 0.55, "tăng mạnh mẽ": 0.70,
+    "bùng nổ": 0.65, "bứt lên": 0.60, "vọt lên": 0.65,
+    "lập đỉnh": 0.70, "đỉnh cao": 0.55, "mặt bằng mới": 0.50,
+    "vượt kỳ vọng": 0.75, "vượt dự báo": 0.70, "vượt đỉnh": 0.70,
+    "tăng nóng": 0.60, "cháy hàng": 0.50, "khan hiếm": 0.40,
+
+    # ── Dòng vốn / thanh khoản tích cực ─────────────────────────────────────
+    "dòng vốn vào": 0.60, "dòng tiền tốt": 0.55, "thanh khoản dồi dào": 0.55,
+    "vốn ngoại vào": 0.60, "ngoại tệ chảy vào": 0.55,
+
+    # ── Sóng tăng / bull run ─────────────────────────────────────────────────
+    "sóng tăng": 0.65, "chu kỳ tăng": 0.60, "xu hướng tăng": 0.55,
+    "thị trường bull": 0.70, "bull run": 0.70,
+
+    # ── Kết quả vượt / đạt cao ──────────────────────────────────────────────
+    "kết quả vượt": 0.65, "kết quả tốt": 0.60, "kết quả tích cực": 0.65,
+    "doanh thu tăng mạnh": 0.75, "lợi nhuận kỷ lục": 0.85,
 }
 
 _VI_NEGATIVE: Dict[str, float] = {
@@ -354,6 +373,26 @@ _VI_NEGATIVE: Dict[str, float] = {
     # ── Tâm lý tiêu cực ──────────────────────────────────────────────────────
     "hoảng loạn bán ra": 0.7, "đỏ sàn toàn diện": 0.65,
     "nhà đầu tư hoảng loạn": 0.6,
+
+    # ── Giảm mạnh / xả hàng / thoát ─────────────────────────────────────────
+    "giảm sàn": 0.70, "xả hàng": 0.55, "bán mạnh": 0.55,
+    "bị bán mạnh": 0.65, "rơi khỏi": 0.55, "rơi mạnh": 0.65,
+    "đảo chiều giảm": 0.60, "lao dốc mạnh": 0.75,
+    "mất điểm": 0.50, "mất mốc": 0.55,
+
+    # ── Cảnh báo tài chính ────────────────────────────────────────────────────
+    "cảnh báo": 0.35, "cảnh báo nguy cơ": 0.55,
+    "rủi ro lớn": 0.55, "nguy cơ": 0.40,
+    "thua lỗ": 0.65, "lỗ nặng": 0.75, "lỗ lớn": 0.70,
+    "lỗ ròng": 0.65, "lỗ quý": 0.60, "báo lỗ": 0.70,
+
+    # ── Sụt giảm doanh thu / vĩ mô xấu ──────────────────────────────────────
+    "sốt giá": 0.45, "leo thang giá": 0.45,
+    "tín dụng xấu": 0.55, "nợ xấu tăng": 0.65, "nợ xấu": 0.50,
+    "doanh thu giảm": 0.55, "lợi nhuận giảm": 0.60,
+    "doanh thu sụt": 0.60, "lợi nhuận sụt": 0.65,
+    "bị phạt": 0.45, "xử phạt": 0.45, "truy thu": 0.40,
+    "chậm tiến độ": 0.40, "dừng dự án": 0.55,
 }
 
 # Pre-sort descending by phrase length (longest match wins)
