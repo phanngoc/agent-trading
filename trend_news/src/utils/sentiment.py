@@ -69,6 +69,74 @@ except ImportError:
     _uts_available = False
 
 # ---------------------------------------------------------------------------
+# PhoBERT — Vietnamese financial BERT (lazy-loaded singleton)
+# Model: mr4/phobert-base-vi-sentiment-analysis
+# Labels: Tiêu cực (neg) / Tích cực (pos) / Trung tính (neutral)
+# Load time: ~1.5s (cached after first call). Inference: ~0.2s/batch.
+# Only invoked when lexicon signal is weak (|score| < BERT_INVOKE_THRESHOLD).
+# ---------------------------------------------------------------------------
+_phobert_pipe = None
+_phobert_available: bool = False
+_phobert_load_attempted: bool = False
+
+BERT_INVOKE_THRESHOLD = 0.20   # invoke BERT when lexicon |score| < this
+BERT_WEIGHT           = 0.60   # BERT weight in final blend (vs lexicon 0.40)
+_BERT_LABEL_MAP = {"Tích cực": 1.0, "Tiêu cực": -1.0, "Trung tính": 0.0}
+BERT_CONFIDENCE_THRESHOLD = 0.92  # only trust BERT when confidence is high
+
+# BERT is general VI model — only invoke when text has domain keywords
+# (prevents false positives on plain factual news like "công bố kết quả")
+_BERT_DOMAIN_RE = re.compile(
+    r'lỗ|lãi|tăng trần|giảm sàn|call margin|giải chấp|bán tháo|'
+    r'phá sản|vỡ nợ|kỷ lục|đột biến|sụt giảm|bứt phá|'
+    r'cổ tức|margin|thanh khoản|room ngoại|upcom|niêm yết',
+    re.IGNORECASE
+)
+
+
+def _load_phobert() -> bool:
+    """Lazy-load PhoBERT pipeline. Returns True if available."""
+    global _phobert_pipe, _phobert_available, _phobert_load_attempted
+    if _phobert_load_attempted:
+        return _phobert_available
+    _phobert_load_attempted = True
+    try:
+        from transformers import pipeline as hf_pipeline
+        _phobert_pipe = hf_pipeline(
+            "text-classification",
+            model="mr4/phobert-base-vi-sentiment-analysis",
+            device="cpu",
+            max_length=128,
+            truncation=True,
+        )
+        _phobert_available = True
+    except Exception:
+        _phobert_available = False
+    return _phobert_available
+
+
+def _score_phobert(text: str) -> float:
+    """Run PhoBERT on text. Returns score in [-1.0, 1.0] or 0.0 on error.
+
+    Only returns non-zero when confidence >= BERT_CONFIDENCE_THRESHOLD.
+    This prevents the model from overriding clear neutral cases with marginal signals.
+    """
+    if not _load_phobert() or _phobert_pipe is None:
+        return 0.0
+    try:
+        result = _phobert_pipe(text[:256])[0]
+        direction = _BERT_LABEL_MAP.get(result["label"], 0.0)
+        confidence = float(result["score"])
+        # Only emit signal when BERT is very confident
+        if confidence < BERT_CONFIDENCE_THRESHOLD:
+            return 0.0
+        # Scale: 0.85 conf → 0.35, 1.0 conf → 1.0
+        magnitude = (confidence - BERT_CONFIDENCE_THRESHOLD) / (1.0 - BERT_CONFIDENCE_THRESHOLD)
+        return direction * magnitude
+    except Exception:
+        return 0.0
+
+# ---------------------------------------------------------------------------
 # Vietnamese language detection — zero dependency, Unicode-based
 # ---------------------------------------------------------------------------
 _VI_UNIQUE_RE = re.compile(
@@ -467,14 +535,18 @@ def refresh_auto_learned_cache() -> None:
 #
 # Kết luận: Lexicon là nguồn chính. ViVADER chỉ bổ sung khi lexicon silent.
 # ---------------------------------------------------------------------------
-def _score_vietnamese(text: str) -> float:
+def _score_vietnamese(text: str, use_bert: bool = True) -> float:
     """
     Vietnamese financial sentiment scoring.
 
     Pipeline (priority order):
-    1. Lexicon score  → domain-specific financial terms, negation, intensifiers
-    2. ViVADER score  → general Vietnamese sentiment (fallback only)
-    3. Weighted blend → khi cả hai đều có signal, lexicon weight 70%
+    1. Lexicon score     → domain-specific financial terms, negation, intensifiers
+    2. ViVADER score     → general Vietnamese sentiment (fallback only)
+    3. PhoBERT (BERT)    → deep-learning fallback when lexicon signal is weak
+
+    Logic:
+    - If |lexicon| >= BERT_INVOKE_THRESHOLD → lexicon is confident, blend with ViVADER
+    - If |lexicon| < BERT_INVOKE_THRESHOLD  → invoke PhoBERT, blend result with lexicon
 
     Returns compound score in [-1.0, 1.0].
     """
@@ -482,30 +554,51 @@ def _score_vietnamese(text: str) -> float:
     vivader_score = _vivader.polarity_scores(text[:512])["compound"] if _vivader_available else 0.0
 
     LEX_THRESHOLD = 0.05
-    VIV_THRESHOLD = 0.15   # higher threshold: only blend ViVADER when it's confident
-    LEX_WEIGHT    = 0.85   # lexicon strongly dominates
+    VIV_THRESHOLD = 0.15
+    LEX_WEIGHT    = 0.85
     VIV_WEIGHT    = 0.15
 
+    lex_strong = abs(lexicon_score) >= BERT_INVOKE_THRESHOLD  # confident lexicon signal
     lex_has_signal = abs(lexicon_score) > LEX_THRESHOLD
     viv_has_signal = abs(vivader_score) > VIV_THRESHOLD
 
-    # Both signal AND same direction → weighted blend
+    # --- Lexicon is confident: standard blend (no BERT needed) ---
+    if lex_strong:
+        if viv_has_signal:
+            same_direction = (lexicon_score > 0) == (vivader_score > 0)
+            if same_direction:
+                return lexicon_score * LEX_WEIGHT + vivader_score * VIV_WEIGHT
+        return lexicon_score
+
+    # --- Lexicon weak: invoke PhoBERT (only for domain-relevant text) ---
+    # Strategy: BERT improves coverage but conflicts with inaccurate DB labels.
+    # Only use BERT for clearly negative signals — negative sentiment is universal
+    # across domains (lỗ, thanh lý, phá sản) regardless of training data.
+    # Positive BERT signals are less reliable (general model sees "vận hành" as positive
+    # but financial context may be neutral).
+    if use_bert and _BERT_DOMAIN_RE.search(text):
+        bert_score = _score_phobert(text)
+
+        # Trust BERT only for strong negative signals (both BERT negative AND strong conf)
+        if bert_score < -0.30:
+            if lex_has_signal and lexicon_score < 0:
+                # Both agree negative → blend
+                return bert_score * BERT_WEIGHT + lexicon_score * (1 - BERT_WEIGHT)
+            elif not lex_has_signal:
+                # Only BERT has strong negative signal
+                return bert_score
+
+    # --- Lexicon / ViVADER fallback ---
+    # --- No strong BERT: fallback to standard logic ---
     if lex_has_signal and viv_has_signal:
         same_direction = (lexicon_score > 0) == (vivader_score > 0)
         if same_direction:
             return lexicon_score * LEX_WEIGHT + vivader_score * VIV_WEIGHT
-        else:
-            # Conflicting signals: trust lexicon (domain-specific knowledge wins)
-            return lexicon_score
-
-    # Lexicon only → use directly (primary source)
+        return lexicon_score
     if lex_has_signal:
         return lexicon_score
-
-    # ViVADER only → fallback for general sentiment
     if viv_has_signal:
         return vivader_score
-
     return 0.0
 
 
