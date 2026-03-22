@@ -35,6 +35,7 @@ from .baodautu_scraper import (
     BaoDauTuChungKhoanScraper,
     BaoDauTuKinhDoanhScraper,
 )
+from .worldmonitor_fetcher import WorldMonitorFetcher, classify_threat, WORLDMONITOR_FEEDS
 
 # Registry of all available Vietnam scrapers
 VIETNAM_SCRAPERS = {
