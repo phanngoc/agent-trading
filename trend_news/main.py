@@ -44,6 +44,16 @@ except ImportError:
     VIETNAM_SCRAPER_AVAILABLE = False
     print("⚠ VietnamDataFetcher không khả dụng (bỏ qua scraper sources). Chạy: pip install beautifulsoup4 lxml")
 
+# Import WorldMonitor enrichment pipeline
+try:
+    from src.scrapers.worldmonitor_fetcher import WorldMonitorFetcher
+    from src.core.article_enricher import ArticleEnricher
+    from src.core.groq_summarizer import GroqSummarizer
+    WORLDMONITOR_AVAILABLE = True
+except ImportError as _wm_err:
+    WORLDMONITOR_AVAILABLE = False
+    print(f"⚠ WorldMonitor pipeline không khả dụng: {_wm_err}")
+
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 import webbrowser
@@ -104,6 +114,17 @@ class NewsAnalyzer:
         scraper_platforms = [p for p in CONFIG["PLATFORMS"] if p.get("type") == "scraper"]
         if VIETNAM_SCRAPER_AVAILABLE and scraper_platforms:
             self.vn_fetcher = VietnamDataFetcher()
+
+        # Initialize WorldMonitor enrichment pipeline
+        self.wm_fetcher = None
+        self.wm_enricher_cls = None
+        self.wm_summarizer = None
+        if WORLDMONITOR_AVAILABLE:
+            self.wm_fetcher = WorldMonitorFetcher(timeout=10, max_items_per_feed=8)
+            self.wm_enricher_cls = ArticleEnricher
+            groq_key = os.environ.get("GROQ_API_KEY", "")
+            self.wm_summarizer = GroqSummarizer(api_key=groq_key) if groq_key else None
+            print(f"🌍 WorldMonitor pipeline: enabled | Groq: {'enabled' if groq_key else 'disabled (no GROQ_API_KEY)'}")
 
         if self.is_github_actions:
             self._check_version_update()
@@ -360,6 +381,71 @@ class NewsAnalyzer:
                 self.db_manager.save_news(results, id_to_name)
             except Exception as e:
                 print(f"⚠ Lỗi lưu database: {e}")
+
+        # ── WorldMonitor enrichment ──────────────────────────────────────────
+        if self.wm_fetcher and results:
+            try:
+                print("\n🌍 WorldMonitor: fetching global context...")
+                wm_articles = self.wm_fetcher.fetch_flat(
+                    categories=["vietnam", "asia", "finance", "geopolitical"]
+                )
+                print(f"  ✓ {len(wm_articles)} global articles fetched")
+
+                if wm_articles:
+                    enricher = self.wm_enricher_cls(wm_articles, max_context_items=3)
+                    enriched_count = 0
+
+                    for platform_id, platform_data in results.items():
+                        # results format: {title: {"ranks": [...], "url": ..., "mobileUrl": ...}}
+                        if not isinstance(platform_data, dict):
+                            continue
+                        # Convert title-keyed dict → list for enricher
+                        items_list = [
+                            {"title": title, **info}
+                            for title, info in platform_data.items()
+                            if isinstance(info, dict)
+                        ]
+                        if not items_list:
+                            continue
+                        enriched_items = enricher.enrich_batch(items_list)
+                        enriched_count += len(enriched_items)
+
+                        # Write back enrichment fields into existing title-keyed dict
+                        for enriched in enriched_items:
+                            t = enriched.get("title", "")
+                            if t in platform_data and isinstance(platform_data[t], dict):
+                                platform_data[t]["threat_level"] = enriched.get("threat_level", "info")
+                                platform_data[t]["geo_relevance"] = enriched.get("geo_relevance", 0)
+                                platform_data[t]["market_signal"] = enriched.get("market_signal", "neutral")
+                                platform_data[t]["wm_sources"] = enriched.get("wm_sources", [])
+                                # Store global_context as JSON-safe list of titles only
+                                ctx = enriched.get("global_context", [])
+                                platform_data[t]["global_context"] = [c.get("title", "") for c in ctx[:3]]
+
+                    # Inject WM global articles as a virtual platform
+                    # Format must match results format: {title: {"ranks": [n], "url": ..., "mobileUrl": ...}}
+                    wm_vn = [a for a in wm_articles if a.get("wm_category") in ("vietnam", "asia")][:30]
+                    if wm_vn:
+                        wm_platform_data = {
+                            a.get("title", f"item-{idx}"): {
+                                "ranks": [idx + 1],
+                                "url": a.get("url", ""),
+                                "mobileUrl": "",
+                                "wm_category": a.get("wm_category", ""),
+                                "threat_level": a.get("threat_level", "info"),
+                                "source": a.get("source", ""),
+                            }
+                            for idx, a in enumerate(wm_vn)
+                        }
+                        results["worldmonitor-global"] = wm_platform_data
+                        id_to_name["worldmonitor-global"] = "WorldMonitor Global"
+                        print(f"  ✓ {len(wm_vn)} WM Vietnam/Asia articles added as virtual platform")
+
+                    print(f"  ✓ Enriched {enriched_count} articles with global context")
+
+            except Exception as e:
+                print(f"  ⚠ WorldMonitor enrichment error (non-fatal): {e}")
+        # ── End WorldMonitor enrichment ──────────────────────────────────────
 
         title_file = save_titles_to_file(results, id_to_name, failed_ids)
         print(f"标题đãlưuđến: {title_file}")
