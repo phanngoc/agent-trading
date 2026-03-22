@@ -27,6 +27,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _HERE)
 
 from src.core.llm_sentiment_evaluator import LLMSentimentEvaluator
+from src.core.dual_provider_evaluator import DualProviderEvaluator
 
 _DEFAULT_DB = os.path.join(_HERE, "output", "trend_news.db")
 
@@ -37,8 +38,9 @@ def main() -> int:
     parser.add_argument("--min-uncertainty", type=float, default=0.35)
     parser.add_argument("--limit",           type=int,   default=100)
     parser.add_argument("--min-confidence",  type=float, default=0.6)
-    parser.add_argument("--provider",        type=str,   default="openai",
-                        choices=["openai", "anthropic"])
+    parser.add_argument("--provider",        type=str,   default="auto",
+                        choices=["openai", "anthropic", "groq", "auto"],
+                        help="LLM provider. 'auto' tries groq→openai→anthropic")
     parser.add_argument("--model",           type=str,   default=None)
     parser.add_argument("--db-path",         type=str,   default=_DEFAULT_DB)
     parser.add_argument("--dry-run",         action="store_true")
@@ -53,12 +55,24 @@ def main() -> int:
     print(f"  Dry run:         {args.dry_run}")
 
     try:
-        evaluator = LLMSentimentEvaluator(
-            db_path=args.db_path,
-            model_provider=args.provider,
-            model_name=args.model,
-            uncertainty_threshold=args.min_uncertainty,
-        )
+        if args.provider == "auto":
+            print("[Batch 2] Using DualProviderEvaluator (Groq→OpenAI routing)")
+            evaluator = DualProviderEvaluator(
+                db_path=args.db_path,
+                uncertainty_threshold=args.min_uncertainty,
+            )
+            stats = evaluator.get_stats()
+            for p, info in stats.items():
+                if isinstance(info, dict):
+                    status = "✓" if info.get("available") else "✗"
+                    print(f"  {status} {p}: {info.get('model','N/A')} — {info.get('routes','')}")
+        else:
+            evaluator = LLMSentimentEvaluator(
+                db_path=args.db_path,
+                model_provider=args.provider,
+                model_name=args.model,
+                uncertainty_threshold=args.min_uncertainty,
+            )
     except (ImportError, ValueError) as e:
         print(f"[Batch 2] Cannot initialize LLM evaluator: {e}")
         return 1

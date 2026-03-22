@@ -49,6 +49,13 @@ try:
 except ImportError:
     _OPENAI_AVAILABLE = False
 
+try:
+    from langchain_groq import ChatGroq  # type: ignore
+
+    _GROQ_AVAILABLE = True
+except ImportError:
+    _GROQ_AVAILABLE = False
+
 
 # ---------------------------------------------------------------------------
 # Data structures
@@ -156,11 +163,39 @@ class LLMSentimentEvaluator:
     # ------------------------------------------------------------------
 
     def _init_llm(self, provider: str, model_name: Optional[str]) -> Any:
-        """Initialize the cheapest viable LLM for the given provider."""
+        """Initialize LLM for the given provider with auto-fallback.
+
+        Provider priority:
+          groq   → llama-3.3-70b-versatile (free, fast, VN articles)
+          openai → gpt-4o-mini (paid, accurate, high-uncertainty EN articles)
+          anthropic → claude-haiku (paid, multilingual)
+
+        Auto-fallback: groq → openai → anthropic (first available key wins)
+        """
         if not _LANGCHAIN_AVAILABLE:
             raise ImportError(
                 "LangChain not installed. Run: pip install langchain-core"
             )
+
+        if provider == "auto":
+            # Try providers in order: groq → openai → anthropic
+            for p in ["groq", "openai", "anthropic"]:
+                try:
+                    return self._init_llm(p, model_name)
+                except (ImportError, ValueError):
+                    continue
+            raise ValueError("No LLM provider available. Set GROQ_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY.")
+
+        if provider == "groq":
+            if not _GROQ_AVAILABLE:
+                raise ImportError(
+                    "langchain-groq not installed. Run: pip install langchain-groq"
+                )
+            name = model_name or "llama-3.3-70b-versatile"
+            api_key = os.environ.get("GROQ_API_KEY", "")
+            if not api_key:
+                raise ValueError("GROQ_API_KEY not set in environment")
+            return ChatGroq(model=name, api_key=api_key, max_tokens=2048)
 
         if provider == "openai":
             if not _OPENAI_AVAILABLE:
@@ -184,7 +219,7 @@ class LLMSentimentEvaluator:
                 raise ValueError("ANTHROPIC_API_KEY not set in environment")
             return ChatAnthropic(model=name, api_key=api_key, max_tokens=2048)
 
-        raise ValueError(f"Unknown provider: {provider!r}. Use 'anthropic' or 'openai'.")
+        raise ValueError(f"Unknown provider: {provider!r}. Use 'groq', 'openai', 'anthropic', or 'auto'.")
 
     def _get_connection(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)

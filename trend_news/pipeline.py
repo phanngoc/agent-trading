@@ -62,8 +62,9 @@ def main() -> int:
     parser.add_argument("--db-path",      type=str, default=_DEFAULT_DB)
     parser.add_argument("--days-back",    type=int, default=7,
                         help="Days back for LLM evaluation (default: 7)")
-    parser.add_argument("--llm-provider", type=str, default="openai",
-                        choices=["openai", "anthropic"])
+    parser.add_argument("--llm-provider", type=str, default="auto",
+                        choices=["openai", "anthropic", "groq", "auto"],
+                        help="LLM provider for Batch 2. 'auto' tries groq→openai→anthropic")
     parser.add_argument("--llm-model",    type=str, default=None)
     parser.add_argument("--dry-run",      action="store_true",
                         help="Pass --dry-run to Batches 2 and 3")
