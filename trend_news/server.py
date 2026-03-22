@@ -1,178 +1,224 @@
+"""
+TrendRadar Production API Server
+
+Standards:
+  - FastAPI + Pydantic v2 strict models
+  - Alpha Vantage-compatible /query endpoint (NEWS_SENTIMENT)
+  - Native /api/v1/* endpoints for trading agents
+  - /api/v2/intel/* endpoints for WorldMonitor global intel
+  - /health + /metrics endpoints
+  - API key auth (X-API-Key header or ?apikey= param)
+  - Rate limiting per key (token bucket)
+  - Structured error responses (RFC 7807)
+
+Trading agent data quality:
+  - Sentiment score: pre-computed (batch) with on-the-fly fallback
+  - Confidence score exposed
+  - Ticker-level aggregated sentiment
+  - Global threat level + geo_relevance for market context
+  - WM cross-reference (Iran war → oil → VN market signal)
+"""
+
+from __future__ import annotations
+
 import os
-from datetime import datetime
-from typing import List, Optional
+import time
+import sqlite3
+from datetime import datetime, timedelta
+from functools import lru_cache
+from typing import Dict, List, Optional, Tuple, Any
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Query
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException, Query, Header, Request, Depends
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field, field_validator
 
 from src.core.database import DatabaseManager
+from src.utils.sentiment import get_sentiment
+from src.core.sentiment_learning import SentimentLearningManager
+from src.core.keyword_extractor import KeywordExtractor
+from src.core.ticker_mapper import TICKER_ALIASES
+
+# ── Config ────────────────────────────────────────────────────────────────────
+
+DB_PATH = os.path.join(os.path.dirname(__file__), "output", "trend_news.db")
+if not os.path.exists(DB_PATH):
+    DB_PATH = os.path.join("output", "trend_news.db")
+
+API_KEYS = set(filter(None, os.environ.get("TRENDRADAR_API_KEYS", "dev-key").split(",")))
+RATE_LIMIT_PER_MINUTE = int(os.environ.get("TRENDRADAR_RATE_LIMIT", "60"))
+
+_rate_buckets: Dict[str, List[float]] = {}
+
+# ── App ───────────────────────────────────────────────────────────────────────
 
 app = FastAPI(
     title="TrendRadar API",
-    description="API for accessing news trends and scraped data (compatible style with Alpha Vantage)",
-    version="1.0.0",
+    description="Production news intelligence API for Vietnamese market + global context (WorldMonitor)",
+    version="2.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
 )
 
-# Initialize Database Manager
-# Assuming the DB is in output directory as configured in main.py
-DB_PATH = os.path.join(os.path.dirname(__file__), "output", "trend_news.db")
-if not os.path.exists(DB_PATH):
-    # Fallback to check relative path if running from root
-    DB_PATH = os.path.join("output", "trend_news.db")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+)
 
 db_manager = DatabaseManager(DB_PATH)
+learning_manager = SentimentLearningManager(DB_PATH)
+keyword_extractor = KeywordExtractor(DB_PATH)
 
+# ── Auth + Rate limiting ──────────────────────────────────────────────────────
+
+def _check_rate_limit(api_key: str) -> bool:
+    now = time.time()
+    window = _rate_buckets.setdefault(api_key, [])
+    # Remove requests older than 60s
+    _rate_buckets[api_key] = [t for t in window if now - t < 60]
+    if len(_rate_buckets[api_key]) >= RATE_LIMIT_PER_MINUTE:
+        return False
+    _rate_buckets[api_key].append(now)
+    return True
+
+def get_api_key(
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+    apikey: Optional[str] = Query(None),
+) -> str:
+    key = x_api_key or apikey or ""
+    # Dev mode: no keys configured → allow all
+    if API_KEYS == {"dev-key"}:
+        return key or "dev"
+    if key not in API_KEYS:
+        raise HTTPException(
+            status_code=401,
+            detail={"code": "UNAUTHORIZED", "message": "Invalid or missing API key"},
+        )
+    if not _check_rate_limit(key):
+        raise HTTPException(
+            status_code=429,
+            detail={"code": "RATE_LIMITED", "message": f"Max {RATE_LIMIT_PER_MINUTE} req/min"},
+        )
+    return key
+
+# ── Sentiment helpers ─────────────────────────────────────────────────────────
+
+def _sentiment_label_to_score(label: str) -> float:
+    """Map label → canonical score for Alpha Vantage compatibility."""
+    mapping = {
+        "Bullish": 0.5, "bullish": 0.5,
+        "Somewhat-Bullish": 0.25, "somewhat_bullish": 0.25,
+        "Neutral": 0.0, "neutral": 0.0,
+        "Somewhat-Bearish": -0.25, "somewhat_bearish": -0.25,
+        "Bearish": -0.5, "bearish": -0.5,
+    }
+    return mapping.get(label, 0.0)
+
+def _score_to_av_label(score: float) -> str:
+    """Alpha Vantage standard sentiment label from score."""
+    if score <= -0.50: return "Bearish"
+    if score <= -0.20: return "Somewhat-Bearish"
+    if score <   0.20: return "Neutral"
+    if score <   0.40: return "Somewhat-Bullish"
+    return "Bullish"
+
+def _resolve_sentiment(item: Dict) -> Tuple[float, str, float]:
+    """Returns (score, label, confidence). Uses pre-computed if available."""
+    db_score = item.get("sentiment_score")
+    db_label = item.get("sentiment_label")
+    if db_score is not None and db_label is not None:
+        return float(db_score), db_label, 0.85  # batch-computed = high confidence
+    score, label = get_sentiment(item.get("title", ""))
+    return score, label, 0.50  # on-the-fly = lower confidence
+
+def _source_domain(source_id: str) -> str:
+    domains = {
+        "cafef": "cafef.vn", "vnexpress-kinhdoanh": "vnexpress.net",
+        "vneconomy-chungkhoan": "vneconomy.vn", "tinnhanhchungkhoan": "tinnhanhchungkhoan.vn",
+        "24hmoney": "24hmoney.vn", "vietnamfinance": "vietnamfinance.vn",
+        "wallstreetcn-hot": "wallstreetcn.com", "hackernews": "news.ycombinator.com",
+    }
+    return domains.get(source_id, f"{source_id}.com")
+
+# ── Pydantic models ───────────────────────────────────────────────────────────
 
 class NewsItem(BaseModel):
     title: str
     url: str
-    time_published: str
-    summary: Optional[str] = ""
-    banner_image: Optional[str] = None
+    time_published: str          # ISO 8601: 2026-03-22T15:30:00
     source: str
-    category_within_source: Optional[str] = "General"
-    source_domain: Optional[str] = ""
+    source_domain: str
+    summary: str = ""
     topics: List[str] = []
-    overall_sentiment_score: float = 0.0
+    overall_sentiment_score: float = Field(ge=-1.0, le=1.0, default=0.0)
     overall_sentiment_label: str = "Neutral"
-    relevance_score: int = 1
+    sentiment_confidence: float = Field(ge=0.0, le=1.0, default=0.5)
+    relevance_score: float = Field(ge=0.0, le=1.0, default=0.5)
+    # Trading agent extensions
+    threat_level: Optional[str] = None       # critical/high/medium/low/info
+    market_signal: Optional[str] = None      # bullish/bearish/neutral
+    geo_relevance: Optional[float] = None    # 0.0-1.0 (VN relevance)
+    global_context: List[str] = []          # related WM headlines
 
 
 class NewsSentimentResponse(BaseModel):
     items: str
-    sentiment_score_definition: str = "x <= -0.50: Bearish; -0.50 < x <= -0.20: Somewhat-Bearish; -0.20 < x < 0.20: Neutral; 0.20 <= x < 0.40: Somewhat-Bullish; x >= 0.40: Bullish"
-    relevance_score_definition: str = "0 < x <= 1: with a higher score indicating higher relevance."
+    sentiment_score_definition: str = (
+        "x <= -0.50: Bearish; -0.50 < x <= -0.20: Somewhat-Bearish; "
+        "-0.20 < x < 0.20: Neutral; 0.20 <= x < 0.40: Somewhat-Bullish; x >= 0.40: Bullish"
+    )
+    relevance_score_definition: str = "0.0–1.0: higher = more relevant to query"
     feed: List[NewsItem]
 
 
-from src.utils.sentiment import get_sentiment
-from src.core.sentiment_learning import SentimentLearningManager
-from src.core.keyword_extractor import KeywordExtractor
-from src.core.labeling_pipeline import LabelingPipeline
-
-# Initialize learning system
-learning_manager = SentimentLearningManager(DB_PATH)
-keyword_extractor = KeywordExtractor(DB_PATH)
-labeling_pipeline = LabelingPipeline(DB_PATH)
-
-@app.get("/", tags=["Root"])
-def read_root():
-    return {"message": "Welcome to TrendRadar API"}
-
-
-@app.get("/query", response_model=NewsSentimentResponse, tags=["Alpha Vantage Compatible"])
-def get_news_sentiment(
-    function: str = Query(..., description="The function to perform. Supported: NEWS_SENTIMENT"),
-    tickers: Optional[str] = Query(None, description="The stock ticker to filter by (Currently maps to source_id or title search)"),
-    topics: Optional[str] = Query(None, description="The topics to filter by"),
-    time_from: Optional[str] = Query(None, description="Start time (YYYYMMDDTHHMM)"),
-    time_to: Optional[str] = Query(None, description="End time (YYYYMMDDTHHMM)"),
-    limit: int = Query(50, description="Limit number of results"),
-    apikey: Optional[str] = Query(None, description="API Key (Ignored for now)")
-):
-    """
-    Mock endpoint compatible with Alpha Vantage NEWS_SENTIMENT.
-    """
-    if function != "NEWS_SENTIMENT":
-         raise HTTPException(status_code=400, detail="Only NEWS_SENTIMENT function is supported currently.")
-
-    # Convert Alpha Vantage time format (YYYYMMDDTHHMM) to ISO format (YYYY-MM-DDTHH:MM:SS) for DB
-    start_date_iso = None
-    end_date_iso = None
-    
-    if time_from:
-        try:
-            # Parse YYYYMMDDTHHMM
-            dt = datetime.strptime(time_from, "%Y%m%dT%H%M")
-            start_date_iso = dt.isoformat()
-        except ValueError:
-            # Try simple YYYYMMDD
-             try:
-                dt = datetime.strptime(time_from, "%Y%m%d")
-                start_date_iso = dt.isoformat()
-             except ValueError:
-                pass # Ignore invalid format
-
-    if time_to:
-        try:
-            dt = datetime.strptime(time_to, "%Y%m%dT%H%M")
-            end_date_iso = dt.isoformat()
-        except ValueError:
-             try:
-                dt = datetime.strptime(time_to, "%Y%m%d")
-                end_date_iso = dt.isoformat()
-             except ValueError:
-                pass
-
-    raw_news = db_manager.get_filtered_news(
-        start_date=start_date_iso,
-        end_date=end_date_iso,
-        tickers=tickers,   # searched against news titles via alias mapping
-        limit=limit
-    )
-
-    feed_items = []
-    for item in raw_news:
-        # Transform DB item to Alpha Vantage style NewsItem
-        source_id = item.get("source_id", "Unknown")
-        title = item.get("title", "")
-        
-        # Read pre-computed sentiment from DB (written by batch_sentiment.py).
-        # Fall back to on-the-fly only for articles not yet processed by the batch.
-        db_score = item.get("sentiment_score")
-        db_label = item.get("sentiment_label")
-        if db_score is not None and db_label is not None:
-            sentiment_score = float(db_score)
-            sentiment_label = db_label
-        else:
-            sentiment_score, sentiment_label = get_sentiment(title)
-        
-        news_item = NewsItem(
-            title=title,
-            url=item.get("url", ""),
-            time_published=item.get("crawled_at", "").replace("-", "").replace(":", ""),
-            source=source_id,
-            source_domain=source_id,
-            summary=f"Ranked: {item.get('ranks', '')}",
-            topics=[topics] if topics else [],
-            overall_sentiment_score=sentiment_score,
-            overall_sentiment_label=sentiment_label,
-            relevance_score=item.get("relevance_score", 1),
-        )
-        feed_items.append(news_item)
-
-    return NewsSentimentResponse(
-        items=str(len(feed_items)),
-        feed=feed_items
-    )
-
-@app.get("/api/v1/news", tags=["Native API"])
-def get_native_news(
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    source: Optional[str] = None,
-    tickers: Optional[str] = Query(None, description="Comma-separated ticker(s) to search in news titles, e.g. 'VIC' or 'VIC,HPG'"),
-    limit: int = 50
-):
-    """
-    Native API endpoint for getting news from database.
-
-    - **source**: filter by exact scraper source_id (e.g. 'cafef', '24hmoney')
-    - **tickers**: search news titles by stock ticker aliases (e.g. 'VIC' → searches 'Vingroup', 'VIN', ...)
-    """
-    return db_manager.get_filtered_news(
-        start_date=start_date,
-        end_date=end_date,
-        source_id=source,
-        tickers=tickers,
-        limit=limit,
-    )
+class TickerSentimentItem(BaseModel):
+    ticker: str
+    company_name: str
+    article_count: int
+    avg_sentiment_score: float
+    sentiment_label: str
+    bullish_count: int
+    bearish_count: int
+    neutral_count: int
+    top_headlines: List[str]
+    threat_level: Optional[str] = None      # from WM global context
+    market_signal: Optional[str] = None
+    last_updated: str
 
 
-# ============================================================================
-# SENTIMENT LEARNING ENDPOINTS
-# ============================================================================
+class GlobalIntelItem(BaseModel):
+    title: str
+    source_name: str
+    url: str
+    wm_category: str
+    threat_level: str
+    threat_category: str
+    geo_relevance: float
+    published_at: Optional[int]
+    crawl_date: str
+
+
+class GlobalIntelResponse(BaseModel):
+    date: str
+    total: int
+    by_category: Dict[str, int]
+    by_threat: Dict[str, int]
+    items: List[GlobalIntelItem]
+
+
+class PipelineStatus(BaseModel):
+    status: str
+    db_path: str
+    news_articles_total: int
+    wm_articles_total: int
+    news_today: int
+    wm_today: int
+    last_updated: str
+    providers: Dict[str, Any]
+
 
 class SentimentFeedback(BaseModel):
     news_title: str
@@ -185,28 +231,371 @@ class SentimentFeedback(BaseModel):
     comment: Optional[str] = None
 
 
-class KeywordApproval(BaseModel):
-    keyword: str
-    sentiment_type: str  # 'positive' or 'negative'
-    weight: float
+# ── Endpoints ─────────────────────────────────────────────────────────────────
+
+@app.get("/", include_in_schema=False)
+def root():
+    return {"service": "TrendRadar API", "version": "2.0.0", "docs": "/docs"}
 
 
-class LabelSubmission(BaseModel):
-    queue_id: int
-    user_score: float
-    user_label: str
-    comment: Optional[str] = None
+@app.get("/health", tags=["Ops"])
+def health():
+    """Health check — returns 200 if DB accessible."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute("SELECT 1")
+        conn.close()
+        return {"status": "ok", "db": "connected", "timestamp": datetime.utcnow().isoformat() + "Z"}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail={"status": "unhealthy", "error": str(e)})
 
+
+@app.get("/metrics", tags=["Ops"])
+def metrics(api_key: str = Depends(get_api_key)):
+    """Pipeline metrics for monitoring."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    today = datetime.utcnow().date().isoformat()
+
+    def count(table, where="1=1"):
+        try:
+            c.execute(f"SELECT COUNT(*) FROM {table} WHERE {where}")
+            return c.fetchone()[0]
+        except: return 0
+
+    result = {
+        "news_articles": {
+            "total": count("news_articles"),
+            "today": count("news_articles", f"crawl_date='{today}'"),
+            "unscored": count("news_articles", "sentiment_score IS NULL"),
+        },
+        "wm_articles": {
+            "total": count("wm_articles"),
+            "today": count("wm_articles", f"crawl_date='{today}'"),
+            "critical": count("wm_articles", f"threat_level='critical' AND crawl_date='{today}'"),
+            "high": count("wm_articles", f"threat_level='high' AND crawl_date='{today}'"),
+        },
+        "sentiment_feedback": {"total": count("sentiment_feedback")},
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+    }
+    conn.close()
+    return result
+
+
+# ── Alpha Vantage Compatible ──────────────────────────────────────────────────
+
+@app.get("/query", response_model=NewsSentimentResponse, tags=["Alpha Vantage Compatible"])
+def get_news_sentiment(
+    function: str = Query(...),
+    tickers: Optional[str] = Query(None),
+    topics: Optional[str] = Query(None),
+    time_from: Optional[str] = Query(None),
+    time_to: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    sort: str = Query("LATEST", regex="^(LATEST|EARLIEST|RELEVANCE)$"),
+    api_key: str = Depends(get_api_key),
+):
+    """Alpha Vantage NEWS_SENTIMENT compatible endpoint."""
+    if function != "NEWS_SENTIMENT":
+        raise HTTPException(status_code=400, detail={
+            "code": "UNSUPPORTED_FUNCTION",
+            "message": f"Function '{function}' not supported. Use NEWS_SENTIMENT.",
+        })
+
+    def _parse_av_time(s: str) -> Optional[str]:
+        for fmt in ("%Y%m%dT%H%M", "%Y%m%d"):
+            try:
+                return datetime.strptime(s, fmt).isoformat()
+            except ValueError:
+                pass
+        return None
+
+    raw = db_manager.get_filtered_news(
+        start_date=_parse_av_time(time_from) if time_from else None,
+        end_date=_parse_av_time(time_to) if time_to else None,
+        tickers=tickers,
+        limit=limit,
+    )
+
+    feed = []
+    for item in raw:
+        score, label, confidence = _resolve_sentiment(item)
+        crawled = item.get("crawled_at", "")
+        # Normalize to ISO 8601
+        try:
+            ts = datetime.fromisoformat(crawled).strftime("%Y-%m-%dT%H:%M:%S")
+        except Exception:
+            ts = crawled[:19] if len(crawled) >= 19 else crawled
+
+        feed.append(NewsItem(
+            title=item.get("title", ""),
+            url=item.get("url", ""),
+            time_published=ts,
+            source=item.get("source_id", ""),
+            source_domain=_source_domain(item.get("source_id", "")),
+            summary=item.get("title", ""),
+            topics=[topics] if topics else [],
+            overall_sentiment_score=round(score, 4),
+            overall_sentiment_label=label,
+            sentiment_confidence=round(confidence, 2),
+            relevance_score=0.8 if tickers else 0.5,
+            threat_level=item.get("threat_level"),
+            market_signal=item.get("market_signal"),
+            geo_relevance=item.get("geo_relevance"),
+        ))
+
+    return NewsSentimentResponse(items=str(len(feed)), feed=feed)
+
+
+# ── Native v1 ─────────────────────────────────────────────────────────────────
+
+@app.get("/api/v1/news", tags=["Native v1"])
+def get_news(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    source: Optional[str] = None,
+    tickers: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=500),
+    api_key: str = Depends(get_api_key),
+):
+    """Get news with optional filters. Returns enriched articles."""
+    return db_manager.get_filtered_news(
+        start_date=start_date,
+        end_date=end_date,
+        source_id=source,
+        tickers=tickers,
+        limit=limit,
+    )
+
+
+@app.get("/api/v1/tickers/{ticker}", response_model=TickerSentimentItem, tags=["Native v1"])
+def get_ticker_sentiment(
+    ticker: str,
+    days_back: int = Query(7, ge=1, le=30),
+    api_key: str = Depends(get_api_key),
+):
+    """
+    Aggregated sentiment for a single VN stock ticker.
+
+    Returns article count, avg sentiment, bull/bear breakdown,
+    top headlines, and WM global threat context.
+    """
+    ticker = ticker.upper()
+    aliases = TICKER_ALIASES.get(ticker)
+    if not aliases:
+        raise HTTPException(status_code=404, detail={
+            "code": "TICKER_NOT_FOUND",
+            "message": f"Ticker '{ticker}' not in alias map",
+        })
+
+    company_name = aliases[0]
+    start = (datetime.utcnow() - timedelta(days=days_back)).date().isoformat()
+
+    # Fetch articles matching this ticker's aliases
+    articles = db_manager.get_filtered_news(
+        start_date=start, tickers=ticker, limit=200
+    )
+
+    if not articles:
+        return TickerSentimentItem(
+            ticker=ticker,
+            company_name=company_name,
+            article_count=0,
+            avg_sentiment_score=0.0,
+            sentiment_label="Neutral",
+            bullish_count=0, bearish_count=0, neutral_count=0,
+            top_headlines=[],
+            last_updated=datetime.utcnow().isoformat() + "Z",
+        )
+
+    scores, bull, bear, neutral_c = [], 0, 0, 0
+    for a in articles:
+        score, label, _ = _resolve_sentiment(a)
+        scores.append(score)
+        if score >= 0.20: bull += 1
+        elif score <= -0.20: bear += 1
+        else: neutral_c += 1
+
+    avg = round(sum(scores) / len(scores), 4)
+
+    # WM context: any critical/high global events affecting this ticker?
+    wm_today = db_manager.get_wm_articles(
+        threat_levels=["critical", "high"],
+        limit=20,
+    )
+    wm_signal = "neutral"
+    wm_threat = "info"
+    if wm_today:
+        # Check if any WM article is relevant to this ticker's sector
+        # (simple: if ticker is bank/finance, match finance WM; energy → oil WM)
+        sector_map = {
+            "finance": ["VCB","BID","CTG","TCB","MBB","VPB","ACB","HDB","STB","TPB","VIB","OCB","MSB"],
+            "energy":  ["PLX","GAS","PVS","PVD","BSR","OIL","PVC"],
+            "real_estate": ["VIC","VHM","NVL","PDR","KDH","DXG"],
+        }
+        ticker_sector = next((s for s, tks in sector_map.items() if ticker in tks), None)
+        finance_wm = [a for a in wm_today if a.get("wm_category") == "finance"]
+        if finance_wm and ticker_sector in ("finance", "energy"):
+            wm_threat = max(a.get("threat_level","info") for a in finance_wm)
+            bearish_finance = sum(1 for a in finance_wm
+                                  if any(w in a.get("title","").lower()
+                                         for w in ["crash","fall","drop","decline","war","sanction","recession"]))
+            wm_signal = "bearish" if bearish_finance > len(finance_wm) // 2 else "neutral"
+
+    return TickerSentimentItem(
+        ticker=ticker,
+        company_name=company_name,
+        article_count=len(articles),
+        avg_sentiment_score=avg,
+        sentiment_label=_score_to_av_label(avg),
+        bullish_count=bull,
+        bearish_count=bear,
+        neutral_count=neutral_c,
+        top_headlines=[a.get("title","") for a in articles[:5]],
+        threat_level=wm_threat,
+        market_signal=wm_signal,
+        last_updated=datetime.utcnow().isoformat() + "Z",
+    )
+
+
+@app.get("/api/v1/market/summary", tags=["Native v1"])
+def get_market_summary(
+    days_back: int = Query(1, ge=1, le=7),
+    api_key: str = Depends(get_api_key),
+):
+    """
+    Market-level sentiment summary (VN market + global context).
+
+    Returns overall VN market mood + top WM global threats affecting VN.
+    """
+    start = (datetime.utcnow() - timedelta(days=days_back)).date().isoformat()
+    articles = db_manager.get_filtered_news(start_date=start, limit=500)
+
+    total = len(articles)
+    if not total:
+        return {"status": "no_data", "date": start}
+
+    scores = []
+    for a in articles:
+        score, _, _ = _resolve_sentiment(a)
+        scores.append(score)
+
+    avg = round(sum(scores) / len(scores), 4) if scores else 0.0
+    bull = sum(1 for s in scores if s >= 0.20)
+    bear = sum(1 for s in scores if s <= -0.20)
+
+    # WM global threats
+    wm_stats = db_manager.get_wm_stats()
+    high_geo = wm_stats.get("high_geo_relevance", [])
+    critical_count = wm_stats.get("by_threat", {}).get("critical", 0)
+    high_count = wm_stats.get("by_threat", {}).get("high", 0)
+
+    global_risk = "HIGH" if critical_count >= 5 else "MEDIUM" if critical_count >= 2 else "LOW"
+
+    return {
+        "date": start,
+        "vn_market": {
+            "article_count": total,
+            "avg_sentiment_score": avg,
+            "sentiment_label": _score_to_av_label(avg),
+            "bullish_pct": round(bull / total * 100, 1),
+            "bearish_pct": round(bear / total * 100, 1),
+        },
+        "global_risk": {
+            "level": global_risk,
+            "critical_events": critical_count,
+            "high_events": high_count,
+            "vn_relevant": [
+                {
+                    "title": a.get("title",""),
+                    "source": a.get("source",""),
+                    "threat": a.get("threat",""),
+                    "geo_relevance": a.get("geo",""),
+                }
+                for a in high_geo[:5]
+            ],
+        },
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+    }
+
+
+# ── WorldMonitor intel v2 ─────────────────────────────────────────────────────
+
+@app.get("/api/v2/intel", response_model=GlobalIntelResponse, tags=["Global Intel v2"])
+def get_global_intel(
+    date: Optional[str] = Query(None, description="YYYY-MM-DD, default today"),
+    category: Optional[str] = Query(None, description="asia|vietnam|finance|geopolitical|tech"),
+    threat: Optional[str] = Query(None, description="critical|high|medium|low|info"),
+    limit: int = Query(50, ge=1, le=200),
+    api_key: str = Depends(get_api_key),
+):
+    """WorldMonitor global intelligence articles with threat classification."""
+    if date is None:
+        date = datetime.utcnow().date().isoformat()
+
+    threat_filter = [threat] if threat else None
+    articles = db_manager.get_wm_articles(
+        crawl_date=date,
+        category=category,
+        threat_levels=threat_filter,
+        limit=limit,
+    )
+    stats = db_manager.get_wm_stats(crawl_date=date)
+
+    return GlobalIntelResponse(
+        date=date,
+        total=stats.get("total", 0),
+        by_category=stats.get("by_category", {}),
+        by_threat=stats.get("by_threat", {}),
+        items=[GlobalIntelItem(**a) for a in articles],
+    )
+
+
+@app.get("/api/v2/intel/search", tags=["Global Intel v2"])
+def search_intel(
+    q: str = Query(..., min_length=2, description="Search query (FTS5)"),
+    limit: int = Query(20, ge=1, le=100),
+    api_key: str = Depends(get_api_key),
+):
+    """Full-text search across WorldMonitor global intel articles."""
+    results = db_manager.search_wm_articles(q, limit=limit)
+    return {"query": q, "count": len(results), "results": results}
+
+
+@app.get("/api/v2/intel/threat-summary", tags=["Global Intel v2"])
+def get_threat_summary(
+    days_back: int = Query(3, ge=1, le=30),
+    api_key: str = Depends(get_api_key),
+):
+    """
+    Aggregated threat summary for the past N days.
+    Useful for trading agents to assess macro risk environment.
+    """
+    results = []
+    for d in range(days_back):
+        date = (datetime.utcnow() - timedelta(days=d)).date().isoformat()
+        stats = db_manager.get_wm_stats(crawl_date=date)
+        if stats.get("total", 0) > 0:
+            results.append({
+                "date": date,
+                "total": stats["total"],
+                "by_threat": stats.get("by_threat", {}),
+                "by_category": stats.get("by_category", {}),
+                "high_geo": [
+                    {"title": a.get("title",""), "threat": a.get("threat","")}
+                    for a in stats.get("high_geo_relevance", [])[:3]
+                ],
+            })
+    return {"days_back": days_back, "summary": results}
+
+
+# ── Sentiment learning ────────────────────────────────────────────────────────
 
 @app.post("/api/v1/feedback", tags=["Sentiment Learning"])
-def add_sentiment_feedback(feedback: SentimentFeedback):
-    """
-    Submit user feedback on sentiment predictions
-    
-    This helps the system learn and improve over time.
-    """
+def add_feedback(feedback: SentimentFeedback, api_key: str = Depends(get_api_key)):
+    """Submit sentiment label correction to improve the model."""
     try:
-        feedback_id = learning_manager.add_feedback(
+        fid = learning_manager.add_feedback(
             news_title=feedback.news_title,
             predicted_score=feedback.predicted_score,
             predicted_label=feedback.predicted_label,
@@ -214,203 +603,57 @@ def add_sentiment_feedback(feedback: SentimentFeedback):
             user_label=feedback.user_label,
             news_id=feedback.news_id,
             news_url=feedback.news_url,
-            comment=feedback.comment
+            comment=feedback.comment,
         )
-        
-        return {
-            "success": True,
-            "feedback_id": feedback_id,
-            "message": "Feedback recorded successfully"
-        }
+        return {"success": True, "feedback_id": fid}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/v1/feedback/stats", tags=["Sentiment Learning"])
-def get_feedback_statistics(days: int = 7):
-    """
-    Get sentiment prediction statistics
-    """
-    try:
-        stats = learning_manager.get_feedback_stats(days=days)
-        return stats
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/v1/keywords/approve", tags=["Sentiment Learning"])
-def approve_keyword(approval: KeywordApproval):
-    """
-    [Deprecated] Keywords are now auto-activated from keyword_suggestions based on
-    frequency and confidence — no manual approval needed.
-    Returns 410 Gone.
-    """
-    raise HTTPException(
-        status_code=410,
-        detail="Keyword approval is no longer required. Keywords are automatically activated from keyword_suggestions based on frequency and confidence thresholds."
-    )
+def feedback_stats(days: int = 7, api_key: str = Depends(get_api_key)):
+    return learning_manager.get_feedback_stats(days=days)
 
 
 @app.get("/api/v1/keywords/suggestions", tags=["Sentiment Learning"])
-def get_keyword_suggestions(
+def keyword_suggestions(
     days: int = 30,
     min_frequency: int = 3,
-    limit: int = 50
+    limit: int = 50,
+    api_key: str = Depends(get_api_key),
 ):
-    """
-    Get suggested keywords extracted from feedback data
-    """
-    try:
-        patterns = keyword_extractor.analyze_sentiment_patterns(
-            days=days,
-            min_frequency=min_frequency
-        )
-        
-        # Limit results
-        return {
-            "positive": patterns['positive'][:limit],
-            "negative": patterns['negative'][:limit]
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/api/v1/keywords/approved", tags=["Sentiment Learning"])
-def get_approved_keywords():
-    """
-    Get auto-activated keywords (aggregated from keyword_suggestions).
-    Keywords are activated automatically based on frequency and confidence — no approval needed.
-    """
-    try:
-        keywords = learning_manager.get_auto_aggregated_keywords(
-            min_confidence=0.3, min_frequency=2, lookback_days=30
-        )
-        return keywords
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    patterns = keyword_extractor.analyze_sentiment_patterns(
+        days=days, min_frequency=min_frequency
+    )
+    return {"positive": patterns["positive"][:limit], "negative": patterns["negative"][:limit]}
 
 
 @app.get("/api/v1/lexicon/combined", tags=["Sentiment Learning"])
-def get_combined_lexicon():
-    """
-    Get combined lexicon (static + auto-learned from keyword_suggestions)
-    """
-    try:
-        auto_kw = learning_manager.get_auto_aggregated_keywords(
-            min_confidence=0.3, min_frequency=2, lookback_days=30
-        )
-        return {
-            "positive": auto_kw['positive'],
-            "negative": auto_kw['negative'],
-            "total_positive": len(auto_kw['positive']),
-            "total_negative": len(auto_kw['negative'])
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+def combined_lexicon(api_key: str = Depends(get_api_key)):
+    auto_kw = learning_manager.get_auto_aggregated_keywords(
+        min_confidence=0.3, min_frequency=2, lookback_days=30
+    )
+    return auto_kw
 
 
-@app.get("/api/v1/analysis/improvements", tags=["Sentiment Learning"])
-def get_improvement_suggestions():
-    """
-    Get comprehensive improvement suggestions
-    """
-    try:
-        suggestions = keyword_extractor.suggest_improvements()
-        return suggestions
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+# ── Exception handlers ────────────────────────────────────────────────────────
+
+@app.exception_handler(404)
+async def not_found(request: Request, exc: HTTPException):
+    return JSONResponse(status_code=404, content={
+        "code": "NOT_FOUND", "message": str(exc.detail), "path": str(request.url.path)
+    })
+
+@app.exception_handler(422)
+async def validation_error(request: Request, exc):
+    return JSONResponse(status_code=422, content={
+        "code": "VALIDATION_ERROR", "message": "Invalid request parameters",
+        "detail": exc.errors() if hasattr(exc, "errors") else str(exc),
+    })
 
 
-
-# ============================================================================
-# Labeling Queue Endpoints
-# ============================================================================
-
-@app.post("/api/v1/labeling/build", tags=["Labeling Queue"])
-def build_labeling_queue(
-    date: str = Query(default=datetime.now().strftime("%Y-%m-%d"), description="ISO date YYYY-MM-DD"),
-    limit: int = Query(default=25, ge=1, le=100, description="Max items to queue"),
-):
-    """Score today's articles and insert the top N most uncertain into labeling_queue."""
-    try:
-        result = labeling_pipeline.build_daily_queue(date, limit=limit)
-        return {**result, "limit": limit}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/api/v1/labeling/queue", tags=["Labeling Queue"])
-def get_labeling_queue(
-    date: str = Query(default=datetime.now().strftime("%Y-%m-%d"), description="ISO date YYYY-MM-DD"),
-    status: Optional[str] = Query(default=None, description="Filter by status: pending|labeled|skipped"),
-):
-    """Return queue items for the given date, ordered by priority_rank."""
-    try:
-        items = labeling_pipeline.get_queue(date, status_filter=status)
-        return {"date": date, "count": len(items), "items": items}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/v1/labeling/submit", tags=["Labeling Queue"])
-def submit_label(submission: LabelSubmission):
-    """Submit an admin label for a queue item. Feeds directly into sentiment_feedback."""
-    try:
-        feedback_id = labeling_pipeline.submit_label(
-            queue_id=submission.queue_id,
-            user_score=submission.user_score,
-            user_label=submission.user_label,
-            comment=submission.comment,
-        )
-        return {"success": True, "feedback_id": feedback_id, "queue_id": submission.queue_id}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/v1/labeling/skip/{queue_id}", tags=["Labeling Queue"])
-def skip_queue_item(queue_id: int):
-    """Mark a queue item as skipped."""
-    try:
-        labeling_pipeline.skip_item(queue_id)
-        return {"success": True, "queue_id": queue_id, "status": "skipped"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/api/v1/labeling/stats", tags=["Labeling Queue"])
-def get_labeling_stats(
-    date: str = Query(default=datetime.now().strftime("%Y-%m-%d"), description="ISO date YYYY-MM-DD"),
-):
-    """Return summary statistics for the labeling queue on a given date."""
-    try:
-        stats = labeling_pipeline.get_queue_stats(date)
-        return {"date": date, **stats}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/api/v1/labeling/score", tags=["Labeling Queue"])
-def score_title(title: str = Query(..., description="Article title to score")):
-    """Debug endpoint: compute uncertainty score for a single title."""
-    try:
-        result = labeling_pipeline.score_article_uncertainty(title)
-        return {
-            "title": title,
-            "lexicon_score": result.lexicon_score,
-            "uts_label": result.uts_label,
-            "final_score": result.final_score,
-            "final_label": result.final_label,
-            "uncertainty_score": result.uncertainty_score,
-            "signal_conflict": result.signal_conflict,
-            "magnitude_uncertainty": result.magnitude_uncertainty,
-            "match_sparsity": result.match_sparsity,
-            "fasttext_label": result.fasttext_label,
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
+# ── Entry ─────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=True)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("server:app", host="0.0.0.0", port=port, reload=False, workers=1)
