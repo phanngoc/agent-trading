@@ -392,6 +392,12 @@ class NewsAnalyzer:
                 print(f"  ✓ {len(wm_articles)} global articles fetched")
 
                 if wm_articles:
+                    # Save WM articles to wm_articles table (Option B)
+                    try:
+                        self.db_manager.save_wm_articles(wm_articles)
+                    except Exception as e:
+                        print(f"  ⚠ WM DB save error (non-fatal): {e}")
+
                     enricher = self.wm_enricher_cls(wm_articles, max_context_items=3)
                     enriched_count = 0
 

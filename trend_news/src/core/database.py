@@ -26,6 +26,7 @@ class DatabaseManager:
         try:
             cursor = conn.cursor()
             self._ensure_schema(cursor)
+            self._ensure_wm_schema(cursor)
             conn.commit()
         finally:
             conn.close()
@@ -689,5 +690,312 @@ class DatabaseManager:
         except Exception as e:
             conn.rollback()
             raise
+        finally:
+            conn.close()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# WM (WorldMonitor) articles table — Option B implementation
+# ──────────────────────────────────────────────────────────────────────────────
+
+    def _ensure_wm_schema(self, cursor):
+        """
+        Create wm_articles table and indexes if they don't exist.
+        Safe to call on every startup (idempotent).
+        """
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS wm_articles (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_id        TEXT NOT NULL,
+                source_name      TEXT NOT NULL,
+                title            TEXT NOT NULL,
+                url              TEXT DEFAULT '',
+                wm_category      TEXT NOT NULL,
+                threat_level     TEXT DEFAULT 'info',
+                threat_category  TEXT DEFAULT 'general',
+                threat_confidence REAL DEFAULT 0.5,
+                geo_relevance    REAL DEFAULT 0.0,
+                published_at     INTEGER,
+                crawled_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                crawl_date       TEXT NOT NULL
+            )
+        """)
+        # URL dedup (cross-day: same article won't be re-inserted)
+        cursor.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_wm_unique_url
+            ON wm_articles(url) WHERE url != ''
+        """)
+        # Title dedup (same-day same source)
+        cursor.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_wm_unique_title
+            ON wm_articles(source_id, title, crawl_date)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_wm_crawl_date
+            ON wm_articles(crawl_date)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_wm_category
+            ON wm_articles(wm_category)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_wm_threat
+            ON wm_articles(threat_level)
+        """)
+        # FTS5 for semantic search across WM titles
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='wm_articles_fts'"
+        )
+        if cursor.fetchone() is None:
+            cursor.execute("""
+                CREATE VIRTUAL TABLE wm_articles_fts USING fts5(
+                    title,
+                    content='wm_articles',
+                    content_rowid='id',
+                    tokenize='unicode61 remove_diacritics 0'
+                )
+            """)
+            cursor.execute("""
+                INSERT INTO wm_articles_fts(rowid, title)
+                SELECT id, title FROM wm_articles
+            """)
+            cursor.execute("""
+                CREATE TRIGGER IF NOT EXISTS wm_articles_ai
+                AFTER INSERT ON wm_articles BEGIN
+                    INSERT INTO wm_articles_fts(rowid, title)
+                    VALUES (new.id, new.title);
+                END
+            """)
+            cursor.execute("""
+                CREATE TRIGGER IF NOT EXISTS wm_articles_ad
+                AFTER DELETE ON wm_articles BEGIN
+                    INSERT INTO wm_articles_fts(wm_articles_fts, rowid, title)
+                    VALUES ('delete', old.id, old.title);
+                END
+            """)
+            cursor.execute("""
+                CREATE TRIGGER IF NOT EXISTS wm_articles_au
+                AFTER UPDATE ON wm_articles BEGIN
+                    INSERT INTO wm_articles_fts(wm_articles_fts, rowid, title)
+                    VALUES ('delete', old.id, old.title);
+                    INSERT INTO wm_articles_fts(rowid, title)
+                    VALUES (new.id, new.title);
+                END
+            """)
+
+    def save_wm_articles(self, wm_articles: List[Dict]) -> int:
+        """
+        Save WorldMonitor articles to wm_articles table.
+
+        Uses INSERT OR IGNORE with:
+          - UNIQUE(url) WHERE url != ''         → cross-day URL dedup
+          - UNIQUE(source_id, title, crawl_date) → same-day title dedup
+
+        Args:
+            wm_articles: List of article dicts from WorldMonitorFetcher.fetch_flat()
+
+        Returns:
+            Number of new records inserted.
+        """
+        if not wm_articles:
+            return 0
+
+        import datetime
+        conn = self._get_connection()
+        count = 0
+        try:
+            cursor = conn.cursor()
+            # Ensure wm_articles table exists
+            self._ensure_wm_schema(cursor)
+
+            current_time = datetime.datetime.now().isoformat()
+            crawl_date = datetime.date.today().isoformat()
+
+            data = []
+            for a in wm_articles:
+                data.append((
+                    a.get("source", "unknown").lower().replace(" ", "-"),  # source_id
+                    a.get("source", "Unknown"),                             # source_name
+                    a.get("title", ""),                                    # title
+                    a.get("url", ""),                                      # url
+                    a.get("wm_category", "general"),                       # wm_category
+                    a.get("threat_level", "info"),                         # threat_level
+                    a.get("threat_category", "general"),                   # threat_category
+                    a.get("threat_confidence", 0.5),                       # threat_confidence
+                    a.get("geo_relevance", 0.0),                           # geo_relevance
+                    a.get("published_at"),                                 # published_at
+                    current_time,                                          # crawled_at
+                    crawl_date,                                            # crawl_date
+                ))
+
+            cursor.executemany("""
+                INSERT OR IGNORE INTO wm_articles
+                    (source_id, source_name, title, url, wm_category,
+                     threat_level, threat_category, threat_confidence,
+                     geo_relevance, published_at, crawled_at, crawl_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, data)
+
+            conn.commit()
+            count = cursor.rowcount
+            skipped = len(data) - count
+            print(f"  ✓ WM DB: saved {count} articles ({skipped} duplicates skipped)")
+        except Exception as e:
+            conn.rollback()
+            print(f"  ✗ WM DB save error: {e}")
+        finally:
+            conn.close()
+        return count
+
+    def get_wm_articles(
+        self,
+        crawl_date: str = None,
+        category: str = None,
+        threat_levels: List[str] = None,
+        limit: int = 100,
+    ) -> List[Dict]:
+        """
+        Query WM articles with optional filters.
+
+        Args:
+            crawl_date:    'YYYY-MM-DD' — defaults to today
+            category:      'asia' | 'vietnam' | 'finance' | 'geopolitical' | 'tech'
+            threat_levels: e.g. ['critical', 'high']
+            limit:         max rows
+
+        Returns:
+            List of article dicts.
+        """
+        import datetime
+        if crawl_date is None:
+            crawl_date = datetime.date.today().isoformat()
+
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='wm_articles'"
+            )
+            if cursor.fetchone() is None:
+                return []
+
+            conditions = ["crawl_date = ?"]
+            params: List = [crawl_date]
+
+            if category:
+                conditions.append("wm_category = ?")
+                params.append(category)
+
+            if threat_levels:
+                placeholders = ",".join("?" * len(threat_levels))
+                conditions.append(f"threat_level IN ({placeholders})")
+                params.extend(threat_levels)
+
+            where = " AND ".join(conditions)
+            cursor.execute(f"""
+                SELECT id, source_name, title, url, wm_category,
+                       threat_level, threat_category, geo_relevance,
+                       published_at, crawl_date
+                FROM wm_articles
+                WHERE {where}
+                ORDER BY geo_relevance DESC, published_at DESC
+                LIMIT ?
+            """, params + [limit])
+
+            cols = [c[0] for c in cursor.description]
+            return [dict(zip(cols, row)) for row in cursor.fetchall()]
+        finally:
+            conn.close()
+
+    def search_wm_articles(self, query: str, limit: int = 20) -> List[Dict]:
+        """
+        Full-text search across WM article titles.
+
+        Args:
+            query: Search terms (FTS5 syntax supported)
+            limit: Max results
+
+        Returns:
+            List of matching article dicts.
+        """
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='wm_articles_fts'"
+            )
+            if cursor.fetchone() is None:
+                return []
+
+            cursor.execute("""
+                SELECT w.id, w.source_name, w.title, w.url, w.wm_category,
+                       w.threat_level, w.geo_relevance, w.crawl_date,
+                       rank
+                FROM wm_articles_fts f
+                JOIN wm_articles w ON w.id = f.rowid
+                WHERE wm_articles_fts MATCH ?
+                ORDER BY rank
+                LIMIT ?
+            """, (query, limit))
+            cols = [c[0] for c in cursor.description]
+            return [dict(zip(cols, row)) for row in cursor.fetchall()]
+        finally:
+            conn.close()
+
+    def get_wm_stats(self, crawl_date: str = None) -> Dict:
+        """
+        Get summary stats for WM articles on a given date.
+
+        Returns:
+            {total, by_category, by_threat, high_geo_relevance}
+        """
+        import datetime
+        if crawl_date is None:
+            crawl_date = datetime.date.today().isoformat()
+
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='wm_articles'"
+            )
+            if cursor.fetchone() is None:
+                return {"total": 0}
+
+            cursor.execute(
+                "SELECT COUNT(*) FROM wm_articles WHERE crawl_date = ?", (crawl_date,)
+            )
+            total = cursor.fetchone()[0]
+
+            cursor.execute("""
+                SELECT wm_category, COUNT(*) cnt
+                FROM wm_articles WHERE crawl_date = ?
+                GROUP BY wm_category ORDER BY cnt DESC
+            """, (crawl_date,))
+            by_category = dict(cursor.fetchall())
+
+            cursor.execute("""
+                SELECT threat_level, COUNT(*) cnt
+                FROM wm_articles WHERE crawl_date = ?
+                GROUP BY threat_level ORDER BY cnt DESC
+            """, (crawl_date,))
+            by_threat = dict(cursor.fetchall())
+
+            cursor.execute("""
+                SELECT title, source_name, wm_category, threat_level, geo_relevance
+                FROM wm_articles
+                WHERE crawl_date = ? AND geo_relevance >= 0.4
+                ORDER BY geo_relevance DESC LIMIT 5
+            """, (crawl_date,))
+            high_geo = [dict(zip(
+                ["title", "source", "category", "threat", "geo"], row
+            )) for row in cursor.fetchall()]
+
+            return {
+                "total": total,
+                "by_category": by_category,
+                "by_threat": by_threat,
+                "high_geo_relevance": high_geo,
+            }
         finally:
             conn.close()
