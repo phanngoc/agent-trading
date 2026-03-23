@@ -711,6 +711,10 @@ _ZH_POSITIVE: list[tuple[str, float]] = [
     # 降息 / 宽松 / 刺激
     ("降息", 0.60), ("降准", 0.60), ("宽松", 0.45), ("刺激", 0.40),
     ("利率下调", 0.55), ("货币宽松", 0.50),
+    # 贸易 / 协议 / 价格提涨
+    ("贸易协议", 0.55), ("自由贸易协议", 0.60), ("贸易协定生效", 0.60),
+    ("价格提涨", 0.45), ("计划提涨", 0.45), ("涨价", 0.40),
+    ("焦炭价格上涨", 0.50), ("焦炭提涨", 0.50),
     # 市场积极 / 走强
     ("市场情绪好转", 0.55), ("情绪回暖", 0.50), ("资金流入", 0.50),
     ("成交量放大", 0.35), ("量价齐升", 0.60),
@@ -735,6 +739,8 @@ _ZH_NEGATIVE: list[tuple[str, float]] = [
     ("债务危机", 0.75), ("资金链断裂", 0.80),
     # 加息 / 紧缩 / 制裁
     ("加息", 0.65), ("升息", 0.65), ("缩表", 0.50), ("紧缩", 0.50),
+    ("净回笼", 0.55), ("逆回购净回笼", 0.60), ("资金净回笼", 0.55),  # liquidity drain
+    ("国债收益率创高", 0.55), ("国债收益率为.*高点", 0.55),  # yield highs = bearish
     ("制裁", 0.65), ("关税", 0.45), ("贸易战", 0.60),
     # 市场情绪差
     ("恐慌", 0.65), ("市场情绪低落", 0.55), ("信心不足", 0.50),
@@ -821,23 +827,45 @@ def _score_chinese_financial(text: str) -> float:
 # ---------------------------------------------------------------------------
 _EN_FIN_POSITIVE: list[tuple[str, float]] = [
     ("record high", 0.75), ("all-time high", 0.75), ("beats expectations", 0.80),
+    ("beat estimates", 0.75), ("beats estimates", 0.75), ("record earnings", 0.75),
     ("strong earnings", 0.70), ("profit surge", 0.70), ("revenue growth", 0.75),
     ("rate cut", 0.75), ("fed cuts", 0.80), ("dovish", 0.55),
     ("rally", 0.65), ("surges", 0.70), ("soars", 0.65), ("jumps", 0.50),
     ("buyback", 0.50), ("dividend increase", 0.60), ("upgrade", 0.55),
     ("buy rating", 0.60), ("outperform", 0.55), ("overweight", 0.50),
-    ("gdp growth", 0.50), ("jobs added", 0.45), ("unemployment falls", 0.50),
+    ("gdp growth", 0.50), ("jobs added", 0.55), ("unemployment falls", 0.60),
+    ("unemployment rate falls", 0.60), ("adds jobs", 0.55), ("adds 200k", 0.60),
+    ("adds 100k", 0.55), ("adds 300k", 0.60), ("new jobs", 0.45),
+    ("inflation falls", 0.65), ("inflation cools", 0.65), ("inflation eases", 0.65),
+    ("cpi falls", 0.65), ("cpi drops", 0.60), ("lowest inflation", 0.65),
+    ("lowest level in", 0.50), ("lowest since", 0.50),
+    ("trade deal", 0.60), ("trade agreement", 0.60), ("investment boom", 0.65),
+    ("commits investment", 0.55), ("pledges investment", 0.55),
+    ("committed to invest", 0.60), ("to invest", 0.45),
+    ("economic recovery", 0.55), ("economic growth", 0.55),
 ]
 
 _EN_FIN_NEGATIVE: list[tuple[str, float]] = [
     ("crash", 0.80), ("collapse", 0.80), ("plunges", 0.75), ("tumbles", 0.65),
-    ("recession", 0.70), ("bear market", 0.65), ("selloff", 0.65),
-    ("rate hike", 0.55), ("fed hikes", 0.60), ("hawkish", 0.50),
+    ("recession", 0.70), ("bear market", 0.65), ("selloff", 0.65), ("sell-off", 0.65),
+    # Rate hike patterns — various phrasings
+    ("rate hike", 0.65), ("rate hikes", 0.65), ("interest rate hike", 0.65),
+    ("raises interest rates", 0.65), ("raising rates", 0.65), ("rate increase", 0.60),
+    ("fed hikes", 0.65), ("hawkish", 0.55), ("tightening", 0.45),
+    # Earnings misses
     ("misses expectations", 0.70), ("profit warning", 0.70), ("earnings miss", 0.70),
     ("layoffs", 0.60), ("job cuts", 0.60), ("bankruptcy", 0.85),
     ("downgrade", 0.60), ("sell rating", 0.65), ("underperform", 0.55),
-    ("war", 0.60), ("sanctions", 0.75), ("tariffs", 0.45), ("default", 0.75),
-    ("inflation surges", 0.65), ("yields spike", 0.55),
+    ("war", 0.60), ("sanctions", 0.75), ("tariffs", 0.55), ("new tariffs", 0.60),
+    ("imposes tariffs", 0.65), ("default", 0.75),
+    ("inflation surges", 0.65), ("inflation rises", 0.55), ("inflation high", 0.55),
+    # Yield highs — bearish for bonds/equities
+    ("yields spike", 0.55), ("yield hit", 0.50), ("yields hit", 0.50),
+    ("yield highest", 0.65), ("yields highest", 0.65), ("yield surge", 0.60),
+    ("16-year high", 0.65), ("highest since", 0.40),
+    # Losses
+    ("loan losses", 0.65), ("massive losses", 0.70), ("credit losses", 0.65),
+    ("tech stocks fall", 0.55), ("stocks fall", 0.55),
 ]
 
 _EN_POS_LEX: list[tuple[str, float]] = sorted(_EN_FIN_POSITIVE, key=lambda x: -len(x[0]))
@@ -845,10 +873,12 @@ _EN_NEG_LEX: list[tuple[str, float]] = sorted(_EN_FIN_NEGATIVE, key=lambda x: -l
 
 
 _EN_DOMAIN_RE = re.compile(
-    r'\b(stock|market|index|share|fund|etf|rate|fed|gdp|cpi|yield|bond|'
+    r'\b(stock|market|index|share|fund|etf|rate|rates|fed|gdp|cpi|yield|yields|bond|'
     r'earnings|profit|revenue|rally|crash|sell.?off|recession|inflation|'
-    r'trade|tariff|sanction|sanctions|bank|invest|crypto|bitcoin|oil|gold|'
-    r'upgrade|downgrade|overweight|underweight|buyback|dividend|ipo|merger|acquisition)\b',
+    r'trade|tariff|tariffs|sanction|sanctions|bank|invest|investment|'
+    r'crypto|bitcoin|oil|gold|jobs|unemployment|economy|economic|fiscal|monetary|'
+    r'upgrade|downgrade|overweight|underweight|buyback|dividend|ipo|merger|acquisition|'
+    r'treasury|central.?bank|interest.?rate)\b',
     re.IGNORECASE
 )
 
@@ -864,12 +894,19 @@ def _score_english_financial(text: str) -> float:
     
     if _vader_available and _vader:
         vader_score = float(_vader.polarity_scores(text[:512])["compound"])
-        if abs(lex) >= 0.15:
-            # Lexicon signal strong — blend 70/30
-            return lex * 0.70 + vader_score * 0.30
+        if abs(lex) >= 0.20:
+            # Financial lexicon strong — trust it, VADER often wrong on financial context
+            # e.g. "raises rates" looks positive to VADER ("raises" = good word)
+            if lex * vader_score > 0:
+                return lex * 0.85 + vader_score * 0.15  # same direction: small VADER boost
+            else:
+                return lex  # disagreement: trust domain lexicon
+        elif abs(lex) >= 0.05:
+            # Weak lexicon signal — 60/40 blend
+            return lex * 0.60 + vader_score * 0.40
         elif abs(vader_score) >= 0.20:
-            # VADER signal only
-            return vader_score * 0.50   # dampen general VADER
+            # No lexicon signal, use VADER lightly
+            return vader_score * 0.40  # dampen general VADER
     return lex
 
 
@@ -885,7 +922,7 @@ except ImportError:
     _NEURAL_AVAILABLE = False
 
 # Lexicon-only threshold: if |lexicon| >= this, skip neural (already confident)
-LEXICON_CONFIDENT_THRESHOLD = 0.40
+LEXICON_CONFIDENT_THRESHOLD = 0.15  # Lexicon leads when |score| >= 0.15
 
 # Neural confidence threshold: below this, fall back to lexicon
 NEURAL_CONF_THRESHOLD = 0.65
@@ -970,10 +1007,15 @@ class SentimentAnalyzer:
         if _NEURAL_AVAILABLE and _neural_engine and _neural_engine.is_en_available():
             neural_score, _, neural_conf = _neural_engine.score_en(text)
             if neural_conf >= NEURAL_CONF_THRESHOLD:
-                # Blend when lexicon has some signal, pure neural when it doesn't
-                if abs(lex_score) > 0.05:
-                    return neural_score * 0.70 + lex_score * 0.30
-                return neural_score
+                if abs(lex_score) >= 0.15:
+                    # Lexicon has meaningful signal: 60/40 blend (lexicon leads)
+                    blended = lex_score * 0.60 + neural_score * 0.40
+                    # If lex and neural agree on direction, boost confidence
+                    if lex_score * neural_score > 0:
+                        return blended * 1.1
+                    # Disagree: trust lexicon (domain-specific)
+                    return lex_score
+                return neural_score  # No lexicon signal: trust FinBERT
 
         return lex_score
 

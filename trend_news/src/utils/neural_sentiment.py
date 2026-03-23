@@ -217,9 +217,12 @@ _VI_RE = _re.compile(
     _re.IGNORECASE
 )
 _EN_FIN_RE = _re.compile(
-    r'\b(stock|market|fund|rate|fed|earnings|profit|revenue|rally|crash|'
-    r'recession|inflation|trade|tariff|sanction|invest|crypto|oil|gold|'
-    r'upgrade|downgrade|buyback|dividend|ipo|merger)\b',
+    r'\b(stock|market|fund|rate|rates|fed|earnings|profit|revenue|rally|crash|'
+    r'recession|inflation|cpi|gdp|yield|yields|bond|jobs|unemployment|'
+    r'trade|tariff|tariffs|sanction|sanctions|invest|investment|crypto|oil|gold|'
+    r'upgrade|downgrade|buyback|dividend|ipo|merger|acquisition|'
+    r'economy|economic|fiscal|monetary|central.?bank|treasury|'
+    r'bank|loan|losses|loss|debt|default|credit)\b',
     _re.IGNORECASE
 )
 

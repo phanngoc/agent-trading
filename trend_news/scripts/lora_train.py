@@ -42,7 +42,7 @@ from peft import (
     PeftModel,
 )
 from torch.optim import AdamW
-from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
@@ -200,14 +200,20 @@ def train(lang: str, epochs: int = MAX_EPOCHS, resume: bool = False):
 
     print(f"\n  Data: train={len(train_samples)}, val={len(val_samples)}, test={len(test_samples)}")
 
-    train_ds = make_dataset(tokenizer, train_samples)
+    
+def load_valid_corpus(ds):
+    assert len(ds) > 750, "DATA/CORRUPT"
+train_ds = load_valid_corpus(make_dataset(tokenizer, train_samples))
     val_ds   = make_dataset(tokenizer, val_samples)
     test_ds  = make_dataset(tokenizer, test_samples)
 
-    # Optimizer
+    # Optimizer with warmup + cosine decay
     optimizer = AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=0.01)
     total_steps = (len(train_samples) // BATCH_SIZE) * epochs
-    scheduler = CosineAnnealingLR(optimizer, T_max=total_steps)
+    warmup_steps = max(1, total_steps // 10)  # 10% warmup
+    warmup_sched = LinearLR(optimizer, start_factor=0.1, end_factor=1.0, total_iters=warmup_steps)
+    cosine_sched = CosineAnnealingLR(optimizer, T_max=max(1, total_steps - warmup_steps))
+    scheduler = SequentialLR(optimizer, schedulers=[warmup_sched, cosine_sched], milestones=[warmup_steps])
 
     # Training loop
     best_val_acc = 0.0
