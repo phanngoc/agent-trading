@@ -39,6 +39,7 @@ from src.utils.sentiment import get_sentiment
 from src.core.sentiment_learning import SentimentLearningManager
 from src.core.keyword_extractor import KeywordExtractor
 from src.core.ticker_mapper import TICKER_ALIASES
+from src.core.sector_mapper import SECTOR_TICKERS, SECTOR_DISPLAY, TICKER_SECTOR, all_sectors
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
@@ -635,6 +636,229 @@ def combined_lexicon(api_key: str = Depends(get_api_key)):
     )
     return auto_kw
 
+
+
+
+# ── API v2: Batch + Sectors + Heatmap ────────────────────────────────────────
+
+class TickerBatchRequest(BaseModel):
+    tickers: List[str] = Field(..., min_length=1, max_length=30)
+    days_back: int = Field(7, ge=1, le=30)
+
+
+@app.post("/api/v2/tickers/batch", tags=["Native v2"])
+def get_batch_ticker_sentiment(
+    body: TickerBatchRequest,
+    api_key: str = Depends(get_api_key),
+):
+    """
+    Batch sentiment for multiple VN tickers in one call.
+    Useful for portfolio-level analysis by trading agents.
+    """
+    from datetime import timedelta
+    start = (datetime.utcnow() - timedelta(days=body.days_back)).date().isoformat()
+    results = {}
+    for ticker in [t.upper() for t in body.tickers]:
+        aliases = TICKER_ALIASES.get(ticker)
+        if not aliases:
+            results[ticker] = {"error": "ticker_not_found"}
+            continue
+        articles = db_manager.get_filtered_news(start_date=start, tickers=ticker, limit=100)
+        if not articles:
+            results[ticker] = {
+                "ticker": ticker, "company": aliases[0], "article_count": 0,
+                "avg_sentiment_score": 0.0, "sentiment_label": "Neutral",
+                "confidence": 0.3, "sector": TICKER_SECTOR.get(ticker),
+            }
+            continue
+        scores = []
+        for a in articles:
+            score, label, conf = _resolve_sentiment(a)
+            scores.append((score, conf))
+        avg = round(sum(s*c for s,c in scores) / sum(c for _,c in scores), 4)
+        conf = round(sum(c for _,c in scores) / len(scores), 2)
+        results[ticker] = {
+            "ticker": ticker,
+            "company": aliases[0],
+            "article_count": len(articles),
+            "avg_sentiment_score": avg,
+            "sentiment_label": _score_to_av_label(avg),
+            "confidence": conf,
+            "sector": TICKER_SECTOR.get(ticker),
+            "top_headlines": [a.get("title","") for a in articles[:3]],
+        }
+    return {"tickers": results, "days_back": body.days_back,
+            "timestamp": datetime.utcnow().isoformat() + "Z"}
+
+
+@app.get("/api/v2/sectors", tags=["Native v2"])
+def list_sectors(api_key: str = Depends(get_api_key)):
+    """List all available sectors with display names."""
+    return {
+        "sectors": [
+            {"id": s, "name": SECTOR_DISPLAY.get(s, s), "ticker_count": len(SECTOR_TICKERS[s])}
+            for s in all_sectors()
+        ]
+    }
+
+
+@app.get("/api/v2/sectors/{sector}", tags=["Native v2"])
+def get_sector_sentiment(
+    sector: str,
+    days_back: int = Query(7, ge=1, le=30),
+    api_key: str = Depends(get_api_key),
+):
+    """
+    Aggregated sentiment for all tickers in a sector.
+    sector: banking|real_estate|energy|steel|tech|retail|food_beverage|
+            aviation|securities|industrial|utilities|logistics
+    """
+    from datetime import timedelta
+    tickers = SECTOR_TICKERS.get(sector.lower())
+    if not tickers:
+        raise HTTPException(status_code=404, detail={
+            "code": "SECTOR_NOT_FOUND",
+            "message": f"Sector '{sector}' not found. Use /api/v2/sectors to list available sectors.",
+        })
+    start = (datetime.utcnow() - timedelta(days=days_back)).date().isoformat()
+    ticker_results = []
+    scores = []
+    for ticker in tickers:
+        articles = db_manager.get_filtered_news(start_date=start, tickers=ticker, limit=50)
+        if not articles:
+            continue
+        t_scores = []
+        for a in articles:
+            score, _, conf = _resolve_sentiment(a)
+            t_scores.append((score, conf))
+        avg = sum(s*c for s,c in t_scores) / sum(c for _,c in t_scores)
+        scores.append(avg)
+        ticker_results.append({
+            "ticker": ticker,
+            "company": TICKER_ALIASES.get(ticker, [ticker])[0],
+            "score": round(avg, 4),
+            "label": _score_to_av_label(avg),
+            "article_count": len(articles),
+        })
+    if not scores:
+        sector_avg, sector_label = 0.0, "Neutral"
+    else:
+        sector_avg = round(sum(scores)/len(scores), 4)
+        sector_label = _score_to_av_label(sector_avg)
+    bull = sum(1 for s in scores if s >= 0.20)
+    bear = sum(1 for s in scores if s <= -0.20)
+    neu  = len(scores) - bull - bear
+    return {
+        "sector": sector,
+        "display_name": SECTOR_DISPLAY.get(sector, sector),
+        "avg_sentiment_score": sector_avg,
+        "sentiment_label": sector_label,
+        "ticker_count": len(ticker_results),
+        "bullish": bull, "bearish": bear, "neutral": neu,
+        "tickers": sorted(ticker_results, key=lambda x: x["score"], reverse=True),
+        "days_back": days_back,
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+    }
+
+
+@app.get("/api/v2/market/heatmap", tags=["Native v2"])
+def get_market_heatmap(
+    days_back: int = Query(1, ge=1, le=7),
+    api_key: str = Depends(get_api_key),
+):
+    """
+    Full market heatmap: all tracked tickers color-coded by sentiment score.
+    Returns scores grouped by sector for visual heatmap rendering.
+    """
+    from datetime import timedelta
+    start = (datetime.utcnow() - timedelta(days=days_back)).date().isoformat()
+    heatmap = {}
+    for sector, tickers in SECTOR_TICKERS.items():
+        sector_data = []
+        for ticker in tickers:
+            articles = db_manager.get_filtered_news(start_date=start, tickers=ticker, limit=30)
+            if not articles:
+                sector_data.append({
+                    "ticker": ticker, "score": 0.0,
+                    "label": "Neutral", "articles": 0
+                })
+                continue
+            t_scores = [_resolve_sentiment(a)[0] for a in articles]
+            avg = round(sum(t_scores)/len(t_scores), 4)
+            sector_data.append({
+                "ticker": ticker,
+                "score": avg,
+                "label": _score_to_av_label(avg),
+                "articles": len(articles),
+            })
+        heatmap[sector] = {
+            "display_name": SECTOR_DISPLAY.get(sector, sector),
+            "tickers": sorted(sector_data, key=lambda x: x["score"], reverse=True),
+        }
+    return {
+        "heatmap": heatmap,
+        "days_back": days_back,
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+    }
+
+
+# ── Intelligence Report endpoints ─────────────────────────────────────────────
+
+@app.get("/api/v2/reports/latest", tags=["Intelligence Reports"])
+def get_latest_report(api_key: str = Depends(get_api_key)):
+    """Get the latest morning briefing report."""
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        c = conn.cursor()
+        c.execute("""
+            SELECT report_date, market_outlook, global_risk, market_score,
+                   content_json, generated_at
+            FROM reports
+            ORDER BY report_date DESC, rowid DESC
+            LIMIT 1
+        """)
+        row = c.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail={
+                "code": "NO_REPORT", "message": "No reports generated yet. Run the intelligence agent."
+            })
+        cols = ["report_date","market_outlook","global_risk","market_score","content_json","generated_at"]
+        result = dict(zip(cols, row))
+        result["content"] = json.loads(result.pop("content_json", "{}"))
+        return result
+    finally:
+        conn.close()
+
+
+@app.post("/api/v2/reports/generate", tags=["Intelligence Reports"])
+def generate_report_now(
+    watchlist: Optional[List[str]] = None,
+    api_key: str = Depends(get_api_key),
+):
+    """
+    Trigger on-demand morning brief generation.
+    Watchlist defaults to VN30 core tickers.
+    """
+    from src.core.intelligence_agent import IntelligenceAgent
+    agent = IntelligenceAgent(
+        db_path=DB_PATH,
+        groq_api_key=os.environ.get("GROQ_API_KEY",""),
+    )
+    report = agent.run_morning_brief(watchlist=watchlist)
+    report_id = agent.save_report(report)
+    return {
+        "report_id": report_id,
+        "report_date": report.report_date,
+        "market_outlook": report.market_outlook,
+        "global_risk": report.global_risk,
+        "market_score": report.market_score,
+        "top_picks": [{"ticker": t.ticker, "label": t.label, "score": t.score}
+                      for t in report.top_picks[:5]],
+        "risk_alerts": [{"ticker": t.ticker, "label": t.label, "score": t.score}
+                        for t in report.risk_alerts[:3]],
+        "synthesis": report.synthesis,
+        "generated_at": report.generated_at,
+    }
 
 # ── Exception handlers ────────────────────────────────────────────────────────
 
