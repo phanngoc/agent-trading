@@ -34,7 +34,8 @@ WORLDMONITOR_FEEDS: Dict[str, List[Tuple[str, str]]] = {
     # Asia — directly relevant to Vietnam
     "asia": [
         ("BBC Asia",        "https://feeds.bbci.co.uk/news/world/asia/rss.xml"),
-        ("The Diplomat",    "https://thediplomat.com/feed/"),
+        # ("The Diplomat",  "https://thediplomat.com/feed/"),  # timeout — disabled
+        ("Nikkei Asia EN",  "https://news.google.com/rss/search?q=site:asia.nikkei.com+when:1d"),
         ("CNA",             "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml"),
         ("Nikkei Asia",     _gn("site:asia.nikkei.com when:3d")),
         ("SCMP China",      _gn("site:scmp.com china when:2d")),
@@ -62,7 +63,7 @@ WORLDMONITOR_FEEDS: Dict[str, List[Tuple[str, str]]] = {
         ("Crisis Group",        "https://www.crisisgroup.org/rss"),
         ("CSIS",                "https://www.csis.org/rss.xml"),
         ("Atlantic Council",    "https://www.atlanticcouncil.org/feed/"),
-        ("UN News",             "https://news.un.org/feed/subscribe/en/news/all/rss.xml"),
+        ("UN News",             "https://www.un.org/en/rss.xml"),
     ],
     # Tech & AI — global signals
     "tech": [
