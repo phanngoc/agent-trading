@@ -1,12 +1,14 @@
 {
   "cn": {
-    "train": 1699,
-    "val": 212,
-    "test": 213
+    "total": 774,
+    "pos": 187,
+    "neg": 187,
+    "neutral": 400
   },
   "en": {
-    "train": 329,
-    "val": 41,
-    "test": 42
+    "total": 456,
+    "pos": 152,
+    "neg": 152,
+    "neutral": 152
   }
 }

@@ -1,213 +1,46 @@
-{"text": "大年初四迎灶神", "label": "negative", "source": "lexicon"}
-{"text": "小猫嫌弃自己脚臭", "label": "negative", "source": "neural_cn:0.99"}
-{"text": "王道席已任湖南省常务副省长", "label": "positive", "source": "neural_cn:0.94"}
-{"text": "美陪审团裁定马斯克欺骗推特投资者", "label": "negative", "source": "neural_cn:0.99"}
-{"text": "何立峰：希望美企为中美经贸关系注入更多稳定性", "label": "positive", "source": "neural_cn:0.92"}
-{"text": "“根本不存在迫在眉睫威胁”，美防长被批不称职：指挥对伊行动如同“摆弄玩具士兵”", "label": "negative", "source": "neural_cn:0.81"}
-{"text": "循着年味而来 外国游客体验沪上中国年｜新春万象录", "label": "positive", "source": "neural_cn:0.99"}
-{"text": "准爸爸拿B超单替宝宝给爷奶拜年", "label": "positive", "source": "neural_cn:1.00"}
-{"text": "大部分美国人不会付费阅读新闻", "label": "negative", "source": "neural_cn:0.99"}
-{"text": "Trae 新计费模式", "label": "negative", "source": "lexicon"}
-{"text": "歼10总师：不想让国家挨打", "label": "negative", "source": "neural_cn:0.94"}
-{"text": "伊朗战争是否令金正恩担心朝鲜的未来？", "label": "positive", "source": "neural_cn:0.81"}
-{"text": "中概互联网指数ETF-KraneShares", "label": "negative", "source": "neural_cn:0.84"}
-{"text": "全国铁路今天预计发送旅客1680万人次", "label": "positive", "source": "neural_cn:0.96"}
-{"text": "女婿连续2年告状 坐丈人腿上求撑腰", "label": "negative", "source": "neural_cn:0.92"}
-{"text": "全国铁路今天预计发送旅客710万人次", "label": "positive", "source": "neural_cn:0.95"}
-{"text": "中国AI大模型调用量领跑全球 中国AI大模型周调用量达4.69万亿Token", "label": "positive", "source": "neural_cn:0.98"}
-{"text": "创近43年最大单周跌幅，黄金“投资神话”终结？", "label": "negative", "source": "neural_cn:0.89"}
-{"text": "如何评价王宏坤、大锁、管乐、尚大庆等 2026 年春晚表演的小品《又来了》？", "label": "negative", "source": "neural_cn:0.78"}
-{"text": "中国冬奥夺金 谌贻琴发贺电吁努力建设体育强国", "label": "positive", "source": "neural_cn:0.97"}
-{"text": "央行公开市场净回笼1293亿元", "label": "positive", "source": "neural_cn:0.81"}
-{"text": "李强出席中国发展高层论坛2026年年会开幕式：求合作、促发展的力量在不断壮大", "label": "positive", "source": "neural_cn:0.98"}
-{"text": "最长春节假期要来了 你打算怎么过", "label": "positive", "source": "neural_cn:0.99"}
-{"text": "不只是原油运输，当下欧亚航线也只有“50英里空中走廊”了", "label": "negative", "source": "neural_cn:0.77"}
-{"text": "广东越野车写满“渣男” 警方：若不违反规定难干预", "label": "negative", "source": "neural_cn:1.00"}
-{"text": "投资者为何抛售黄金白银？", "label": "negative", "source": "neural_cn:0.93"}
-{"text": "拓邦股份：公司尚未布局星载智能电源管理系统", "label": "positive", "source": "neural_cn:0.93"}
-{"text": "现货黄金短线下挫70美元，报道：波兰拟售黄金储备为国防融资", "label": "negative", "source": "neural_cn:0.93"}
-{"text": "网传“梅姨”本人照片系虚假内容", "label": "negative", "source": "neural_cn:1.00"}
-{"text": "回家路上随手拍", "label": "positive", "source": "lexicon"}
-{"text": "不知道有没有程序员使用 ansible, 一个 ansible playbook tui 分享给社区", "label": "positive", "source": "neural_cn:0.96"}
-{"text": "港股石油股多数上涨，中国石油股份(00857.HK)上涨5%，中国海洋石油(00883.HK)涨3.9%。", "label": "positive", "source": "neural_cn:0.99"}
-{"text": "情侣涉虐死2子女　监院纠正花莲县府社安网预警失灵", "label": "negative", "source": "neural_cn:0.92"}
-{"text": "英国前王子安德鲁被捕", "label": "positive", "source": "lexicon"}
-{"text": "歼10总师：不想让国家挨打", "label": "negative", "source": "neural_cn:0.94"}
-{"text": "保利集团发布严正声明", "label": "negative", "source": "lexicon"}
-{"text": "英媒：若美国愿意解除制裁 伊朗将考虑就核谈判做出妥协", "label": "negative", "source": "neural_cn:0.80"}
-{"text": "春节偏财运爆表的星座", "label": "negative", "source": "lexicon"}
-{"text": "严孟达：马年说马三则", "label": "negative", "source": "lexicon"}
-{"text": "陈茂波：春节假期访港内地旅客预计达143万人次", "label": "positive", "source": "neural_cn:0.98"}
-{"text": "这种致癌物在春节很常见", "label": "negative", "source": "neural_cn:0.93"}
-{"text": "环球下周看点：美国GDP与PCE数据来袭 “AI打地鼠”行情会否延续？", "label": "positive", "source": "neural_cn:0.75"}
-{"text": "开年暴涨超50%！“疯涨”背后现信任危机，钨价拐点何时到来？", "label": "negative", "source": "neural_cn:0.84"}
-{"text": "中国政府中东问题特使：中方将同有关各方保持密切沟通", "label": "positive", "source": "neural_cn:0.93"}
-{"text": "伊朗称向以色列特拉维夫发射导弹和无人机", "label": "negative", "source": "neural_cn:0.92"}
-{"text": "你的Tony老师已经累瘫了", "label": "negative", "source": "neural_cn:0.98"}
-{"text": "2000亿美元投资换来股价跳水 最新爆料揭示亚马逊的内部焦虑", "label": "negative", "source": "neural_cn:0.94"}
-{"text": "日本国内汽车售价上涨，涨幅超过工资", "label": "negative", "source": "neural_cn:0.74"}
-{"text": "特步签约「最快女护士」张水华，如何看待不同运动品牌挑选代言人的策略？", "label": "positive", "source": "neural_cn:0.99"}
-{"text": "被特朗普恶搞成猿猴　奥巴马首次回应", "label": "negative", "source": "neural_cn:0.86"}
-{"text": "我承认之前对吴京太大声了", "label": "negative", "source": "neural_cn:0.97"}
-{"text": "Roxy AI Agent：通过对话帮你执行任务", "label": "positive", "source": "neural_cn:0.81"}
-{"text": "恒指跌幅扩大至1% 恒生科技指数跌超2%", "label": "negative", "source": "neural_cn:0.93"}
-{"text": "刚看了下个税去年平台写文章赚了 500", "label": "positive", "source": "neural_cn:0.91"}
-{"text": "刘家明：乐观自信看待未来世界", "label": "positive", "source": "neural_cn:0.98"}
-{"text": "［无广］ AI 中转站的底裤，扒给你看", "label": "negative", "source": "neural_cn:0.99"}
-{"text": "财联社债市早参3月6日|经济主题记者会下午3时举行；央行今日开展8000亿元买断式逆回购", "label": "positive", "source": "neural_cn:0.88"}
-{"text": "泰国财长：第四季度GDP强于预期。", "label": "positive", "source": "neural_cn:0.95"}
-{"text": "金饰价格跌破1400元，一周下降超百元", "label": "negative", "source": "neural_cn:0.98"}
-{"text": "高层看烟花有多吓人", "label": "negative", "source": "neural_cn:0.85"}
-{"text": "小猫不敢再随便熬夜了", "label": "negative", "source": "neural_cn:0.93"}
-{"text": "EIA报告：美国航空燃油产品供应量降至2024年2月以来的最低水平。", "label": "negative", "source": "neural_cn:0.79"}
-{"text": "宋轶 情侣背景", "label": "positive", "source": "lexicon"}
-{"text": "中国春节档票房含预售在内破7亿人民币", "label": "positive", "source": "neural_cn:0.99"}
-{"text": "心通医疗-B(02160.HK)：植入式心律转复除颤器进入创新医疗器械特别审查程序", "label": "positive", "source": "neural_cn:0.89"}
-{"text": "港股IPO周报：思源电气等多家A股公司递表 海致科技集团首日暴涨超240%", "label": "positive", "source": "neural_cn:0.88"}
-{"text": "傅莹在慕安会回应“谁能赢人工智能竞赛”：AI创新发展不是一场短跑赛", "label": "positive", "source": "neural_cn:0.99"}
-{"text": "霍启刚还是忍不住秀恩爱", "label": "positive", "source": "neural_cn:0.99"}
-{"text": "2026 政府工作报告提及将增加普通高中学位供给，推动基础教育扩优提质，能带来哪些实实在在的好处？", "label": "positive", "source": "neural_cn:0.99"}
-{"text": "特斯拉新车没有方向盘没有脚踏板", "label": "negative", "source": "neural_cn:1.00"}
-{"text": "美国首都宣布进入紧急状态", "label": "negative", "source": "neural_cn:0.76"}
-{"text": "委员建议逐步取消中考 初中直升高中", "label": "positive", "source": "neural_cn:0.89"}
-{"text": "俄媒：美国对伊战争每小时耗资4160万美元", "label": "negative", "source": "neural_cn:0.87"}
-{"text": "微信可以发金色朋友圈", "label": "negative", "source": "lexicon"}
-{"text": "五角大楼：美国不会接收中东难民", "label": "negative", "source": "neural_cn:0.81"}
-{"text": "伊朗发射带1吨重弹头导弹打以色列", "label": "negative", "source": "neural_cn:0.84"}
-{"text": "小K播早报|美股科技七巨头签署自主供电承诺 OpenAI发布GPT-5.4", "label": "positive", "source": "neural_cn:0.98"}
-{"text": "王毅：欧洲不应在菜单上应在餐桌旁", "label": "negative", "source": "neural_cn:0.83"}
-{"text": "「188 套餐」拍写真花 3 万，离店 3 小时反悔，女子欲退款遭拒，商家声称「明码标价」就能免责吗？", "label": "negative", "source": "neural_cn:1.00"}
-{"text": "中国队3金3银4铜", "label": "positive", "source": "lexicon"}
-{"text": "BOSS直聘-W(02076.HK)：根据首次公开发售后股份计划购买41.06万股A类普通股", "label": "negative", "source": "neural_cn:0.84"}
-{"text": "“1元购车”商家拒发货，法院驳回消费者诉请：交易合同不成立", "label": "negative", "source": "neural_cn:0.99"}
-{"text": "英国增派四架“台风”战斗机 加强卡塔尔及周边地区防御", "label": "negative", "source": "neural_cn:0.85"}
-{"text": "《太平年》带火“李煜墓” 当地回应", "label": "negative", "source": "neural_cn:0.98"}
-{"text": "港股早报｜市场监管总局约谈7家平台企业 群核科技赴港IPO获证监会备案", "label": "positive", "source": "neural_cn:0.90"}
-{"text": "放了八年的香蕉", "label": "negative", "source": "neural_cn:1.00"}
-{"text": "电动车拟采“绿色车牌” 设计与落实细节下半年公布", "label": "positive", "source": "neural_cn:0.95"}
-{"text": "研究揭秘篮球鞋嘎吱声成因", "label": "negative", "source": "neural_cn:0.99"}
-{"text": "【电报解读】中国科研团队研发出可看罕见病AI系统！机构称DeepSeek开启AI医疗新纪元，正驱动新一轮智能化升级，这家公司可为VTE全病程管理提供可复制的AI+医疗范式", "label": "positive", "source": "neural_cn:0.99"}
-{"text": "没看过《飞驰人生 1 、 2》，直接看《飞驰人生 3》会有门槛吗？", "label": "positive", "source": "neural_cn:0.94"}
-{"text": "最危险时刻来临！六维度剖析：氦气危机将如何冲击全球半导体产业？", "label": "negative", "source": "neural_cn:0.75"}
-{"text": "村民因两村矛盾被打致轻伤，27年后5名打人者被判刑", "label": "negative", "source": "neural_cn:0.92"}
-{"text": "特朗普对与伊朗的谈判进程表示不满", "label": "negative", "source": "neural_cn:0.94"}
-{"text": "封杀中国产品有损印度制造能力，外媒称印度考虑允许采购中国设备", "label": "negative", "source": "neural_cn:0.72"}
-{"text": "缺牙齿正在攻击缺牙齿", "label": "negative", "source": "lexicon"}
-{"text": "工信部：建设信息化系统 加强人工智能大模型等技术在检查中的推广应用", "label": "positive", "source": "neural_cn:0.75"}
-{"text": "如何看待外国记者称谷爱凌「丢掉两枚金牌」，结果遭谷爱凌怒怼「荒谬，我是史上最佳自由式滑雪女运动员」？", "label": "negative", "source": "neural_cn:0.95"}
-{"text": "华尔街见闻早餐FM-Radio | 2026年2月16日", "label": "positive", "source": "neural_cn:0.98"}
-{"text": "马年新春呈现浓浓的“国际范儿”", "label": "positive", "source": "neural_cn:0.93"}
-{"text": "讽刺拉满的春晚小品 尺度不小", "label": "negative", "source": "neural_cn:0.99"}
-{"text": "2500亿元支持消费品以旧换新，财政部将加大直达消费者的普惠政策力度", "label": "positive", "source": "neural_cn:0.98"}
-{"text": "日本2月综合PMI初值 53.8，前值 53.1。", "label": "negative", "source": "neural_cn:0.82"}
-{"text": "为什么一到上海就能强烈地感受到那种都市感呢？", "label": "positive", "source": "neural_cn:1.00"}
-{"text": "港股马年首个交易日：恒生指数开盘跌0.18%，恒生科技指数低开近0.7%。老铺黄金涨近1%，公司将于2月28日进行产品调价。", "label": "positive", "source": "neural_cn:0.79"}
-{"text": "师从茶咖的袁记云饺，能否得出中餐连锁的终极答案", "label": "positive", "source": "neural_cn:0.99"}
-{"text": "中国AI大模型周调用量达4.69万亿Token", "label": "positive", "source": "neural_cn:0.89"}
-{"text": "俄副外长：俄方反对封锁霍尔木兹海峡", "label": "positive", "source": "neural_cn:0.75"}
-{"text": "中国科研人员开发新型碱基编辑系统助水稻精准改良", "label": "positive", "source": "neural_cn:0.96"}
-{"text": "专家：俄罗斯有望跻身全球稀土金属开采前三强", "label": "positive", "source": "neural_cn:0.92"}
-{"text": "Ars Technica AI 记者为 AI 生成内容道歉", "label": "negative", "source": "neural_cn:0.89"}
-{"text": "美國反恐負責人請辭：無法昧著良心支持伊朗戰爭", "label": "negative", "source": "neural_cn:0.85"}
-{"text": "美国考虑降低钢铝关税？这对金属意味着什么", "label": "positive", "source": "neural_cn:0.95"}
-{"text": "Re:Source 新 V 站客戶端", "label": "negative", "source": "neural_cn:0.84"}
-{"text": "徐若晗桃花坞第一大漏勺", "label": "negative", "source": "neural_cn:0.99"}
-{"text": "马上评｜政府工作报告为何一再强调“休假”", "label": "positive", "source": "neural_cn:0.97"}
-{"text": "2026红包分组", "label": "negative", "source": "lexicon"}
-{"text": "建设银行被罚没超4350万", "label": "negative", "source": "neural_cn:0.72"}
-{"text": "网传“梅姨”本人照片系虚假内容", "label": "negative", "source": "neural_cn:1.00"}
-{"text": "【数据看盘】多路资金激烈博弈存储芯片人气股，一线游资联手量化资金抢筹金开新能", "label": "positive", "source": "neural_cn:0.97"}
-{"text": "我国完成首次火箭芯一级箭体海上打捞回收任务", "label": "positive", "source": "neural_cn:0.88"}
-{"text": "马斯克：“Terafab”项目将落户奥斯汀，由特斯拉和SpaceX共同运营", "label": "positive", "source": "neural_cn:0.99"}
-{"text": "财联社3月23日电，韩国KOSPI指数日内重挫6.00%，报5432.67点。", "label": "negative", "source": "neural_cn:0.95"}
-{"text": "港股蛇年收官：恒指低开高收 存储概念及有色金属板块涨幅居前", "label": "positive", "source": "neural_cn:0.99"}
-{"text": "两女子相隔7公里长得一模一样", "label": "negative", "source": "neural_cn:0.98"}
-{"text": "沈腾春晚说错词 撒贝宁倒吸一口气", "label": "negative", "source": "neural_cn:0.87"}
-{"text": "韩延哽咽谈星河入梦排片", "label": "negative", "source": "neural_cn:0.75"}
-{"text": "路劲(01098.HK)：针对全资附属公司新选的清盘申请聆讯延期", "label": "positive", "source": "neural_cn:0.93"}
-{"text": "伦敦金属交易所（LME）：铜库存225575吨，增加925吨。\n\n铝库存475550吨，持平。\n\n镍库存287706吨，持平。\n\n锌库存102000吨，持平。\n\n铅库存287125吨，持平。\n\n锡库存7645吨，持平。", "label": "positive", "source": "neural_cn:0.80"}
-{"text": "市场监管总局约谈7家平台企业", "label": "negative", "source": "neural_cn:0.97"}
-{"text": "加拿大央行行长麦克勒姆：评估中东冲突对经济增长影响“为时过早”", "label": "positive", "source": "neural_cn:0.89"}
-{"text": "马斯克连发16个“太极旗”表情符号招贤：韩国半导体人才，请到特斯拉来", "label": "positive", "source": "neural_cn:0.96"}
-{"text": "这种致癌物在春节很常见", "label": "negative", "source": "neural_cn:0.93"}
-{"text": "17岁男生发现新物种筷子蛇登上SCI", "label": "negative", "source": "neural_cn:0.95"}
-{"text": "巴比伦五号上传到 YouTube 可免费观看", "label": "negative", "source": "neural_cn:0.80"}
-{"text": "顾客称被桔子酒店短信恐吓", "label": "negative", "source": "neural_cn:1.00"}
-{"text": "美媒：特朗普政府想让古巴领导人下台", "label": "negative", "source": "neural_cn:0.93"}
-{"text": "美军欲夺哈尔克岛，军事专家推演了三种可能", "label": "positive", "source": "neural_cn:0.78"}
-{"text": "金十图示：2026年02月17日（周二）黄金ETF持仓报告", "label": "positive", "source": "neural_cn:0.92"}
-{"text": "毛晓彤红包", "label": "negative", "source": "lexicon"}
-{"text": "大年初四 扔穷", "label": "negative", "source": "lexicon"}
-{"text": "日本2月服务业PMI初值 53.8，前值 53.7。", "label": "negative", "source": "neural_cn:0.91"}
-{"text": "苏翊鸣像极了查分前的我", "label": "positive", "source": "neural_cn:0.98"}
-{"text": "伊朗：动用多种先进导弹，美以多层防御网已崩溃，整体战局正扭转", "label": "positive", "source": "neural_cn:0.91"}
-{"text": "国联民生总裁葛小波清华开讲：财富管理是券商高质量发展胜负手，买方投顾是财富管理的核心", "label": "positive", "source": "neural_cn:0.99"}
-{"text": "香港恒生指数3月23日（周一）开盘下跌488.18点，跌幅1.93%，报24789.14点；<br/>香港恒生科技指数3月23日（周一）开盘下跌92.34点，跌幅1.9%，报4780.04点；<br/>国企指数3月23日（周一）开盘下跌140.22点，跌幅1.64%，报8433.85点；<br/>红筹指数3月23日（周一）开盘下跌34.21点，跌幅0.81%，报4212.12点。", "label": "negative", "source": "neural_cn:0.86"}
-{"text": "春节假期首日交通出行人数预计超2.8亿人次 同比增长10.5%", "label": "positive", "source": "neural_cn:0.96"}
-{"text": "腾讯被错杀了？", "label": "negative", "source": "lexicon"}
-{"text": "伊朗南帕尔斯石化设施遭袭", "label": "negative", "source": "neural_cn:0.72"}
-{"text": "中峇鲁组屋164.8万元转售 创普通五房式新高", "label": "negative", "source": "neural_cn:0.87"}
-{"text": "交通运输部：今日全国高速公路车流量超6500万辆次", "label": "positive", "source": "neural_cn:0.96"}
-{"text": "IMF指中国需转型消费主导增长 分析：调整经济结构是根本", "label": "positive", "source": "neural_cn:0.99"}
-{"text": "港金所喜迎马年开市 亚博科技助建一站式交易服务平台", "label": "positive", "source": "neural_cn:0.99"}
-{"text": "美媒：中国AI产业无惧风雨稳步前行", "label": "positive", "source": "neural_cn:0.99"}
-{"text": "缺牙齿正在攻击缺牙齿", "label": "negative", "source": "lexicon"}
-{"text": "创业板低开高走半日涨0.85%，智能电网再掀涨停潮，恒科指大爆发涨超3%，京东涨超8%", "label": "positive", "source": "neural_cn:0.99"}
-{"text": "现货黄金延续跌势，回落至4890美元/盎司下方，日内跌2.01%。", "label": "negative", "source": "neural_cn:0.89"}
-{"text": "财联社3月6日电，摩根士丹利将印度股票评级从超配下调至平配。", "label": "negative", "source": "neural_cn:0.77"}
-{"text": "美股盘前，白银概念股走强，泛美白银(PAAS.O)涨4.6%、赫克拉矿业(HL.N)涨1.9%、First Majestic(AG.O)涨1.3%。", "label": "positive", "source": "neural_cn:0.97"}
-{"text": "美国用6亿日元导弹击落伊朗500万日元无人机", "label": "negative", "source": "neural_cn:0.94"}
-{"text": "香港恒生指数3月23日（周一）开盘下跌488.18点，跌幅1.93%，报24789.14点；<br/>香港恒生科技指数3月23日（周一）开盘下跌92.34点，跌幅1.9%，报4780.04点；<br/>国企指数3月23日（周一）开盘下跌140.22点，跌幅1.64%，报8433.85点；<br/>红筹指数3月23日（周一）开盘下跌34.21点，跌幅0.81%，报4212.12点。", "label": "negative", "source": "neural_cn:0.86"}
-{"text": "智谱 Coding plan 太慢了，根本无法使用", "label": "negative", "source": "neural_cn:1.00"}
-{"text": "社媒使用降低个人幸福感", "label": "negative", "source": "neural_cn:0.96"}
-{"text": "为了增加用户停留时间，我让 Logo 先跳了一下", "label": "positive", "source": "neural_cn:0.91"}
-{"text": "美国最高法院裁定特朗普政府大规模关税政策违法 ，这会带来哪些影响？关税政策会撤回吗？", "label": "positive", "source": "neural_cn:0.91"}
-{"text": "2025 年 AI 编程总结", "label": "positive", "source": "neural_cn:0.94"}
-{"text": "男子政府机关借厕所遭辱骂 当地回应", "label": "negative", "source": "neural_cn:0.99"}
-{"text": "传OpenAI最新一轮融资额破千亿 估值剑指8500亿美元", "label": "positive", "source": "neural_cn:0.91"}
-{"text": "2026新年献词 | 财通资管党委副书记、总经理钱慧：与时间为友，让信任生花", "label": "positive", "source": "neural_cn:0.98"}
-{"text": "大谷翔平经典赛对台敲出满贯砲实战球衣　竞标价破640万元", "label": "positive", "source": "neural_cn:0.95"}
-{"text": "跨越艰辛再圆梦！苏翊鸣：我想再体验一回戴上金牌的感觉", "label": "positive", "source": "neural_cn:0.92"}
-{"text": "十四年资深掌门离职，东方基金和它的尘封往事", "label": "negative", "source": "neural_cn:0.96"}
-{"text": "美国一次次撒谎全世界买单", "label": "negative", "source": "neural_cn:1.00"}
-{"text": "加拿大央行高级副行长罗杰斯：我们在评估供给冲击方面正不断进步。", "label": "positive", "source": "neural_cn:0.98"}
-{"text": "人脸识别的风险不止是“没穿衣服”", "label": "negative", "source": "neural_cn:0.80"}
-{"text": "昨日跨区域人员流动量预计超3.52亿人次 各地将迎来返程客流", "label": "positive", "source": "neural_cn:0.99"}
-{"text": "MSCI亚太指数下跌3%至230.88点。\n\n新加坡海峡时报指数下跌2.2%。", "label": "negative", "source": "neural_cn:0.91"}
-{"text": "工信部：加大对低空产业创新发展的政策支持，建立健全产业标准体系", "label": "positive", "source": "neural_cn:0.75"}
-{"text": "大年初一不洗头不煮饭", "label": "negative", "source": "lexicon"}
-{"text": "顾客在寿司郎吃出金枪鱼寄生虫卵，市场监管局已立案调查，这些虫卵吃了会有多大风险？消费者该如何维权？", "label": "negative", "source": "neural_cn:0.99"}
-{"text": "大年初一香港新界多区有市民非法燃放烟花", "label": "negative", "source": "neural_cn:0.96"}
-{"text": "最全剖析！霍尔木兹海峡长期封锁下 十大产业链危机脉络梳理", "label": "positive", "source": "neural_cn:0.94"}
-{"text": "进口头孢西力欣被炒出 1500 元左右高价，此前每盒仅售 30 元，这款抗生素原研老药为何涨成天价？", "label": "negative", "source": "neural_cn:0.75"}
-{"text": "澳大利亚竞争与消费者委员会：致函主要燃油公司，就当前国际局势下的国内燃油定价问题阐明我们的期望，若某石油公司作出失实陈述或其市场行为违反竞争和消费者保护法，委员会将毫不犹豫采取行动。", "label": "positive", "source": "neural_cn:0.86"}
-{"text": "金十数据整理：每日债券市场要闻速递（2026-03-23）", "label": "positive", "source": "neural_cn:0.79"}
-{"text": "英媒：美以伊战争加速美国霸权衰落", "label": "negative", "source": "neural_cn:0.86"}
-{"text": "伊朗总统证实：拉里贾尼遇袭身亡！儿子与副手一同遇害，以色列对其进行了数周跟踪，内塔尼亚胡：后续会有更多“惊喜”", "label": "positive", "source": "neural_cn:0.74"}
-{"text": "委内瑞拉爆冷击败美国 首次赢得世界棒球经典赛冠军", "label": "positive", "source": "neural_cn:0.86"}
-{"text": "特朗普称美国将向中东增派第二艘航母 施压伊朗达成协议", "label": "negative", "source": "neural_cn:0.79"}
-{"text": "美军打击伊朗无人机母舰 称其体型如二战航母", "label": "negative", "source": "neural_cn:0.86"}
-{"text": "长期喝桶装水的人天塌了", "label": "negative", "source": "neural_cn:1.00"}
-{"text": "初五迎财神，开源项目收到了马年第一份红包", "label": "positive", "source": "neural_cn:1.00"}
-{"text": "樊振东迟到的年夜饭", "label": "positive", "source": "lexicon"}
-{"text": "证监会：严肃查处天风证券违法违规行为", "label": "negative", "source": "neural_cn:0.74"}
-{"text": "Anthropic拒绝五角大楼要求，特朗普下令联邦机构停用Anthropic产品", "label": "negative", "source": "neural_cn:0.85"}
-{"text": "全国工商联等印发文件引导民企提升劳动用工管理能力", "label": "positive", "source": "neural_cn:0.83"}
-{"text": "女子因琐事未赶上回家火车崩溃大哭", "label": "negative", "source": "neural_cn:0.98"}
-{"text": "港股早报｜宇树科技预计目标出货量达1-2万台 三星HBM4或涨价30%", "label": "positive", "source": "neural_cn:0.92"}
-{"text": "含娃量最高的小长假要来了", "label": "positive", "source": "neural_cn:0.98"}
-{"text": "“炸糊的花生米戴黄帽”排第一", "label": "negative", "source": "neural_cn:1.00"}
-{"text": "Stratechery创始人深度访谈：预警2029年大规模“芯片荒”，SaaS模式将终结，广告才是AI终极商业闭环", "label": "positive", "source": "neural_cn:0.95"}
-{"text": "美国总统特朗普：通胀报告非常棒。", "label": "positive", "source": "neural_cn:0.98"}
-{"text": "美联储巴尔金：央行可忽略短期战争冲击 若长期则需政策应对", "label": "positive", "source": "neural_cn:0.90"}
-{"text": "中国央行时隔三年下调外汇风险准备金率至零", "label": "positive", "source": "neural_cn:0.85"}
-{"text": "2026新年献词 | 华兴证券总经理马刚：坚守初心，以专业与温度为投资者创造价值", "label": "positive", "source": "neural_cn:0.99"}
-{"text": "情人节撞上春节最长9天假期", "label": "negative", "source": "neural_cn:0.92"}
-{"text": "电影《挽救计划》传达了一个什么主题？", "label": "positive", "source": "neural_cn:0.89"}
-{"text": "台外交部：日本坠机事故两台湾人遗体寻获", "label": "positive", "source": "neural_cn:0.79"}
-{"text": "通胀预期急剧升温，什么资产最值得关注？【纽约Talk35】", "label": "positive", "source": "neural_cn:0.95"}
-{"text": "春招手握两个 offer 却夜不能寐，是去大厂「镀金」边缘化，还是赌一把小公司核心岗？", "label": "positive", "source": "neural_cn:0.94"}
-{"text": "交易员已完全消化欧洲央行2026年两次25个基点的加息预期。", "label": "positive", "source": "neural_cn:0.97"}
-{"text": "重庆一汽车冲向人群致三伤 警方称司机疑似突发疾病", "label": "negative", "source": "neural_cn:0.81"}
-{"text": "财联社汽车早报【2月28日】", "label": "positive", "source": "neural_cn:0.85"}
-{"text": "arXiv 的独立之路", "label": "positive", "source": "neural_cn:0.85"}
+{"text": "亚太股市、贵金属扩大跌幅", "label": "negative"}
+{"text": "买到了超绝侧面的裤子", "label": "positive"}
+{"text": "财联社债市早参3月23日|金融法草案公开征求意见；上周黄金创43年最大单周跌幅", "label": "positive"}
+{"text": "AI算力需求将超1.3万亿美元！华为加码“企业龙虾”   涉及多家上市公司", "label": "negative"}
+{"text": "油价下挫，WTI原油日内跌幅达4.5%，报93.63美元/桶；布伦特原油日内跌幅达3.5%，报102.22美元/桶。", "label": "negative"}
+{"text": "巨头验证、资本升温   AI算力带火空芯光纤", "label": "positive"}
+{"text": "国家数据局局长刘烈宏：2026年数据工作明确为“数据价值释放年” 加速人工智能与实体经济的深度融合", "label": "positive"}
+{"text": "集体跳水，多元资产“失灵”？投顾与投资者众生相：有人已“跌麻”", "label": "negative"}
+{"text": "新乳业：2025年净利润同比增长35.98% 拟10派3.8元", "label": "positive"}
+{"text": "有「打假人」举报 1200 多家饭店拍黄瓜，将合规性瑕疵说成食品安全问题索要赔偿，这种行为违法吗？", "label": "negative"}
+{"text": "陈赫张子萱带女儿做客王祖蓝家", "label": "positive"}
+{"text": "A股低开，上证指数开跌1.32%，深证成指开跌1.78%，创业板指开跌1.54%；CPO、F5G概念股跌幅居前。", "label": "negative"}
+{"text": "人民币兑美元中间价报6.9041，下调143.00点。", "label": "positive"}
+{"text": "中国发展高层论坛2026年年会今日开幕", "label": "positive"}
+{"text": "债市收盘| 收益率整体上行，30年国债收益率逆势下行0.7BP", "label": "positive"}
+{"text": "国家互联网应急中心等发布OpenClaw安全使用实践指南", "label": "positive"}
+{"text": "股价涨超10倍、创始人身价暴增超20倍 源杰科技为何成A股史上第8只千元股|洞见科创板", "label": "positive"}
+{"text": "韩股遭遇 “大失血”！韩官员紧急喊话：不会出现重大石油供应中断", "label": "negative"}
+{"text": "香港发生亿元黄金劫案，警方拘5人找回73公斤金条", "label": "negative"}
+{"text": "伊朗称允许非“敌方”船只通过霍尔木兹海峡", "label": "negative"}
+{"text": "原来贾玲旁边的是瞿颖啊", "label": "negative"}
+{"text": "资深专家：美军如此无力，让我惊讶", "label": "negative"}
+{"text": "如何理解本周贵金属的大跌？", "label": "negative"}
+{"text": "寿司店后厨老鼠趴在米饭边张望", "label": "negative"}
+{"text": "为什么老虎的头比猫大很多，但并没有比猫聪明多少？", "label": "negative"}
+{"text": "中金：原油冲击对美国的影响或大于中国", "label": "positive"}
+{"text": "乌克兰称与美方讨论和谈“关键问题”", "label": "positive"}
+{"text": "中国发展高层论坛2026年年会开幕 100多位外方嘉宾出席", "label": "positive"}
+{"text": "日本最高外汇事务官员：将根据需要采取一切可能的措施来应对汇市变动", "label": "positive"}
+{"text": "下周重磅日程：特朗普对伊发出48小时通牒、博鳌论坛、美团拼多多小米财报", "label": "positive"}
+{"text": "波兰统计局：2月零售销售额按不变价格计算同比增长5.0%，低于路透调查预期的6.1%。", "label": "negative"}
+{"text": "美暂时解除对伊朗石油制裁后 印度炼油商快速行动：恢复购油！", "label": "positive"}
+{"text": "以色列军方：已确认一枚来自黎巴嫩、朝北部边境沿线一社区发射的火箭弹，报告有人员受伤和财产受损。", "label": "positive"}
+{"text": "老铺黄金：2025年营业收入为约人民币273.03亿元，同比增长约221.0%", "label": "positive"}
+{"text": "能辉科技：股东拟合计减持不超1.56%股份", "label": "negative"}
+{"text": "樊振东2比3温瑞博", "label": "negative"}
+{"text": "国家知识产权局：严厉打击违法违代理规行为集中整治不规范执业行为", "label": "positive"}
+{"text": "央行公开市场净回笼1293亿元", "label": "positive"}
+{"text": "两市融资余额减少172.66亿元", "label": "negative"}
+{"text": "英国男星死在普吉岛排水沟", "label": "negative"}
+{"text": "与人冲突为什么会让我进步？", "label": "positive"}
+{"text": "2025年我国非常规水利用量超250亿立方米", "label": "positive"}
+{"text": "名校毕业生因母亲要求报考偏远小镇公务员，有人称其「失败」了，名校毕业去做小镇公务员到底算不算失败？", "label": "negative"}
+{"text": "北京三部门约谈12家平台企业 通报“内卷式”竞争第一批问题", "label": "negative"}
+{"text": "Groq创始人自曝：用“面包车”打动黄仁勋", "label": "positive"}
+{"text": "香港恒生指数开盘跌1.93%，恒生科技指数跌1.9%。", "label": "negative"}
