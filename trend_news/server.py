@@ -77,13 +77,16 @@ db_manager = DatabaseManager(DB_PATH)
 from src.core.signal_broadcaster import manager as ws_manager, SignalWatcher
 _signal_watcher = SignalWatcher(DB_PATH)
 
-@app.on_event("startup")
-async def _start_watcher():
-    asyncio.create_task(_signal_watcher.run())
+from contextlib import asynccontextmanager
 
-@app.on_event("shutdown")
-async def _stop_watcher():
+@asynccontextmanager
+async def _lifespan(app):
+    asyncio.create_task(_signal_watcher.run())
+    yield
     _signal_watcher.stop()
+
+# attach lifespan after defining it
+app.router.lifespan_context = _lifespan
 learning_manager = SentimentLearningManager(DB_PATH)
 keyword_extractor = KeywordExtractor(DB_PATH)
 
@@ -307,7 +310,7 @@ def get_news_sentiment(
     time_from: Optional[str] = Query(None),
     time_to: Optional[str] = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    sort: str = Query("LATEST", regex="^(LATEST|EARLIEST|RELEVANCE)$"),
+    sort: str = Query("LATEST", pattern="^(LATEST|EARLIEST|RELEVANCE)$"),
     api_key: str = Depends(get_api_key),
 ):
     """Alpha Vantage NEWS_SENTIMENT compatible endpoint."""
@@ -915,7 +918,7 @@ async def websocket_stream(
                 "type": "snapshot",
                 "ticker": ticker,
                 "score": score,
-                "label": _score_to_label(score),
+                "label": _score_to_av_label(score),
                 "article_count": count,
                 "latest_headline": headline[:100] if headline else "",
                 "timestamp": datetime.utcnow().isoformat() + "Z",
