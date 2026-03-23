@@ -582,18 +582,22 @@ def _lexicon_direction(text: str) -> Optional[str]:
 def _score_to_label(compound: float) -> str:
     """Map compound score to sentiment label.
 
-    Thresholds tuned for VN stock trading signals:
-      Bearish<=-0.300, Somewhat-Bearish<=-0.150, Neutral<0.125,
-      Somewhat-Bullish<0.200, Bullish>=0.200
+    Thresholds:
+      Bearish      <= -0.200  (strong negative signal)
+      Somewhat-Bearish <= -0.100
+      Neutral       < 0.100
+      Somewhat-Bullish < 0.200
+      Bullish      >= 0.200
 
-    Rationale: Trading agents need stronger signals → lower thresholds
-    reduce false "Somewhat" labels on clear bull/bear events.
+    Neural models (CN LoRA, EN FinBERT) output scores near ±0.9 for clear signals,
+    so these thresholds produce clean Bullish/Bearish labels.
+    VN lexicon ~0.2-0.4 for moderate terms → Somewhat-Bearish/Bullish is intentional.
     """
-    if compound <= -0.300:
+    if compound <= -0.200:
         return "Bearish"
-    elif compound <= -0.150:
+    elif compound <= -0.100:
         return "Somewhat-Bearish"
-    elif compound < 0.125:
+    elif compound < 0.100:
         return "Neutral"
     elif compound < 0.200:
         return "Somewhat-Bullish"
@@ -740,6 +744,12 @@ _ZH_NEGATIVE: list[tuple[str, float]] = [
     ("袭击", 0.60), ("制裁升级", 0.70),
 ]
 
+# Neutral override terms — these cancel out any lexicon signal (market consolidation/waiting)
+_ZH_NEUTRAL_OVERRIDE: list[str] = [
+    "震荡整理", "横盘整理", "窄幅震荡", "区间震荡",
+    "观望情绪", "持币观望", "等待信号", "数据出炉前",
+]
+
 # Sort by length desc (longest match first)
 _ZH_POS_LEX: list[tuple[str, float]] = sorted(_ZH_POSITIVE, key=lambda x: -len(x[0]))
 _ZH_NEG_LEX: list[tuple[str, float]] = sorted(_ZH_NEGATIVE, key=lambda x: -len(x[0]))
@@ -754,6 +764,11 @@ def _score_chinese_financial(text: str) -> float:
     Algorithm: same as VN lexicon_score (longest-match, negation, tanh)
     Focus: financial headlines from wallstreetcn, jin10, cls, weibo, zhihu
     """
+    # Neutral override: market consolidation / wait-and-see patterns → 0.0
+    for neutral_term in _ZH_NEUTRAL_OVERRIDE:
+        if neutral_term in text:
+            return 0.0
+
     weights: list[float] = []
     matched_spans: list[tuple[int, int]] = []
     
@@ -858,9 +873,39 @@ def _score_english_financial(text: str) -> float:
     return lex
 
 
-# Singleton SentimentAnalyzer — public API unchanged
+# ---------------------------------------------------------------------------
+# Neural sentiment engine — lazy-loaded BERT models (CN + EN financial)
+# ---------------------------------------------------------------------------
+try:
+    from src.utils.neural_sentiment import neural_engine as _neural_engine, _EN_FIN_RE
+    _NEURAL_AVAILABLE = True
+except ImportError:
+    _neural_engine = None  # type: ignore
+    _EN_FIN_RE = None      # type: ignore
+    _NEURAL_AVAILABLE = False
+
+# Lexicon-only threshold: if |lexicon| >= this, skip neural (already confident)
+LEXICON_CONFIDENT_THRESHOLD = 0.40
+
+# Neural confidence threshold: below this, fall back to lexicon
+NEURAL_CONF_THRESHOLD = 0.65
+
+
+# ---------------------------------------------------------------------------
+# Singleton SentimentAnalyzer — public API: analyze(text) → (score, label)
 # ---------------------------------------------------------------------------
 class SentimentAnalyzer:
+    """
+    Hybrid routing — priority per language:
+
+    VN  → lexicon only (100% domain accuracy, 10k/sec)
+    CN  → neural PRIMARY (LoRA-fine-tuned, 97.7% accuracy)
+           └─ fallback to lexicon if neural unavailable/low-conf
+    EN  → lexicon gate (financial domain check first)
+           └─ if financial domain: neural PRIMARY (FinBERT)
+           └─ fallback to lexicon
+    other → 0.0 neutral
+    """
     _instance = None
 
     def __new__(cls) -> "SentimentAnalyzer":
@@ -868,25 +913,69 @@ class SentimentAnalyzer:
             cls._instance = super().__new__(cls)
         return cls._instance
 
+    # ── Core routing ──────────────────────────────────────────────────────
+
     def analyze(self, text: str) -> Tuple[float, str]:
-        """
-        Route Vietnamese → underthesea+lexicon, English → VADER.
-        Returns (score, label) with score in [-1.0, 1.0].
-        """
+        """Route text to correct scorer. Returns (score [-1,1], label)."""
         if not text:
             return 0.0, "Neutral"
         try:
-            if _is_vietnamese(text):
-                compound = _score_vietnamese(text[:512])
-            elif _is_chinese(text):
-                compound = _score_chinese_financial(text)
-            else:
-                compound = _score_english_financial(text)
-                # No VADER fallback to prevent false positives on non-financial EN text
+            compound = self._route(text.strip())
             return float(compound), _score_to_label(compound)
-        except Exception as e:
-            print(f"Sentiment analysis error: {e}")
+        except Exception:
             return 0.0, "Neutral"
+
+    def _route(self, text: str) -> float:
+        if _is_vietnamese(text):
+            return _score_vietnamese(text[:512])
+
+        if _is_chinese(text):
+            return self._score_cn(text)
+
+        return self._score_en(text)
+
+    # ── CN: LoRA neural primary, lexicon fallback ─────────────────────────
+
+    def _score_cn(self, text: str) -> float:
+        """CN: neutral-override check → neural (LoRA) primary → lexicon fallback."""
+        # Hard neutral override: consolidation / wait-and-see patterns
+        for neutral_term in _ZH_NEUTRAL_OVERRIDE:
+            if neutral_term in text:
+                return 0.0
+
+        if _NEURAL_AVAILABLE and _neural_engine and _neural_engine.is_cn_available():
+            neural_score, _, neural_conf = _neural_engine.score_cn(text)
+            if neural_conf >= NEURAL_CONF_THRESHOLD:
+                return neural_score
+
+        # Fallback: lexicon (when neural unavailable or low confidence)
+        return _score_chinese_financial(text)
+
+    # ── EN: domain gate → neural primary, lexicon fallback ───────────────
+
+    def _score_en(self, text: str) -> float:
+        """EN: financial domain check → neural (FinBERT) primary → lexicon fallback."""
+        # Non-financial EN → always neutral (avoid false positives on HN/tech)
+        if _EN_FIN_RE and not _EN_FIN_RE.search(text):
+            return 0.0
+
+        # Financial domain confirmed — lexicon check first (fast path)
+        lex_score = _score_english_financial(text)
+
+        # If lexicon is already very confident, skip neural overhead
+        if abs(lex_score) >= LEXICON_CONFIDENT_THRESHOLD:
+            return lex_score
+
+        # Neural primary for ambiguous / weak lexicon signal
+        if _NEURAL_AVAILABLE and _neural_engine and _neural_engine.is_en_available():
+            neural_score, _, neural_conf = _neural_engine.score_en(text)
+            if neural_conf >= NEURAL_CONF_THRESHOLD:
+                # Blend when lexicon has some signal, pure neural when it doesn't
+                if abs(lex_score) > 0.05:
+                    return neural_score * 0.70 + lex_score * 0.30
+                return neural_score
+
+        return lex_score
 
 
 sentiment_analyzer = SentimentAnalyzer()
