@@ -3,6 +3,17 @@ import datetime
 from typing import Dict, List, Optional, Tuple
 import os
 
+# Sources excluded from default /api/v1/news feed (non-financial / general content)
+NON_FINANCIAL_SOURCES = frozenset([
+    "baidu",         # general search trending — mostly non-financial
+    "producthunt",   # product launches — tech, not financial
+    "hackernews",    # tech discussion — not financial
+    "v2ex-share",    # Chinese tech forum
+    "weibo",         # social media — mixed quality
+    "solidot",       # Chinese IT news
+    "zhihu",         # Q&A — mixed quality
+])
+
 
 class DatabaseManager:
     """
@@ -598,6 +609,11 @@ class DatabaseManager:
         if source_id:
             query += " AND source_id = ?"
             params.append(source_id)
+        else:
+            # Exclude non-financial sources from default feed
+            placeholders = ",".join("?" * len(NON_FINANCIAL_SOURCES))
+            query += f" AND source_id NOT IN ({placeholders})"
+            params.extend(sorted(NON_FINANCIAL_SOURCES))
 
         query += " ORDER BY crawled_at DESC LIMIT ?"
         params.append(limit)
