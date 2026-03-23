@@ -1,0 +1,65 @@
+version: "3.9"
+
+services:
+  api:
+    build: .
+    container_name: trendradar-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - trendradar_data:/data
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      - TRENDRADAR_API_KEYS=${TRENDRADAR_API_KEYS}
+      - TRENDRADAR_RATE_LIMIT=60
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  morning-brief:
+    build: .
+    container_name: trendradar-cron
+    volumes:
+      - trendradar_data:/data
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+    # Supercronic for cron in Docker
+    command: >
+      sh -c "pip install supercronic &&
+             echo '0 23 * * 0-4 python /app/morning_brief.py >> /data/logs/morning_brief.log 2>&1' > /etc/crontab &&
+             supercronic /etc/crontab"
+    restart: unless-stopped
+    depends_on:
+      - api
+
+  backup:
+    image: alpine:3.19
+    container_name: trendradar-backup
+    volumes:
+      - trendradar_data:/data:ro
+    environment:
+      - R2_BUCKET=${CLOUDFLARE_R2_BUCKET}
+      - R2_ACCOUNT=${CLOUDFLARE_R2_ACCOUNT_ID}
+      - R2_KEY=${CLOUDFLARE_R2_ACCESS_KEY_ID}
+      - R2_SECRET=${CLOUDFLARE_R2_SECRET_ACCESS_KEY}
+    # Daily 3AM backup to Cloudflare R2
+    command: >
+      sh -c "apk add --no-cache aws-cli &&
+             while true; do
+               sleep 10800;
+               aws s3 cp /data/output/trend_news.db s3://$$R2_BUCKET/backups/trend_news_$$(date +%Y%m%d).db
+                 --endpoint-url https://$$R2_ACCOUNT.r2.cloudflarestorage.com;
+             done"
+    restart: unless-stopped
+
+volumes:
+  trendradar_data:
+    driver: local

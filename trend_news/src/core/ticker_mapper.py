@@ -288,6 +288,19 @@ TICKER_ALIASES: Dict[str, List[str]] = {
     "DIEN": ["điện", "năng lượng tái tạo", "điện mặt trời", "điện gió", "thủy điện"],
     "BAOHINH": ["bảo hiểm", "tái bảo hiểm"],
     "XAYDUNG": ["xây dựng", "vật liệu xây dựng", "xi măng"],
+
+    # ── Retail ──────────────────────────────────────────────────────────────────
+    "PNJ": ["PNJ", "Phú Nhuận Jewelry", "Vàng bạc đá quý Phú Nhuận"],
+    "DGW": ["DGW", "Digiworld", "Digiworld Corporation"],
+    "AST": ["AST", "Dịch vụ Hàng không Taseco", "Taseco Air"],
+    # ── Energy ──────────────────────────────────────────────────────────────────
+    "PGS": ["PGS", "Gas Petrolimex", "Phân phối khí"],
+    "PTC": ["PTC", "Điện lực dầu khí Nhơn Trạch 2", "PTC Power"],
+    # ── Utilities ───────────────────────────────────────────────────────────────
+    "SHP": ["SHP", "Thủy điện Miền Nam", "Southern Hydro Power"],
+    # ── Logistics ───────────────────────────────────────────────────────────────
+    "HAX": ["HAX", "Dịch vụ Ô tô Hàng Xanh", "Hang Xanh"],
+    "ITL": ["ITL", "Tập đoàn Logistics Quốc tế ITL", "ITL Logistics"],
 }
 
 # ---------------------------------------------------------------------------
