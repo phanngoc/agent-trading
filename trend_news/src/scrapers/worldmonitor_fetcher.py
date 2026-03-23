@@ -177,7 +177,9 @@ def _parse_rss(xml_text: str, source_name: str, category: str) -> List[Dict]:
         for entry in entries[:10]:
             def _get(tag: str) -> str:
                 for t in [tag, f"atom:{tag}"]:
-                    el = entry.find(t) or entry.find(t, ns)
+                    el = entry.find(t)
+                    if el is None:
+                        el = entry.find(t, ns)
                     if el is not None and el.text:
                         return el.text.strip()
                 return ""

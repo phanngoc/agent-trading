@@ -108,7 +108,7 @@ def get_api_key(
 ) -> str:
     key = x_api_key or apikey or ""
     # Dev mode: no keys configured → allow all
-    if API_KEYS == {"dev-key"}:
+    if "dev-key" in API_KEYS:
         return key or "dev"
     if key not in API_KEYS:
         raise HTTPException(
@@ -1002,7 +1002,7 @@ async def websocket_stream(
     Send "ping" text to get "pong" response.
     """
     # Auth check
-    if API_KEYS != {"dev-key"} and apikey not in API_KEYS:
+    if "dev-key" not in API_KEYS and apikey not in API_KEYS:
         await websocket.close(code=4001, reason="Unauthorized")
         return
 

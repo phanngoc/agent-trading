@@ -110,8 +110,14 @@ def test_phase1_fetcher(categories=None):
     return results
 
 
-def test_phase2_enricher(wm_articles):
+def test_phase2_enricher():
     separator("Phase 2: ArticleEnricher")
+
+    # Fetch fresh WM articles
+    from src.scrapers.worldmonitor_fetcher import WorldMonitorFetcher
+    fetcher = WorldMonitorFetcher(timeout=10, max_items_per_feed=3, use_cache=True)
+    wm_results = fetcher.fetch_all(categories=["vietnam", "finance"])
+    wm_articles = [a for items in wm_results.values() for a in items]
 
     enricher = ArticleEnricher(wm_articles, max_context_items=3, min_overlap_score=0.1)
     enriched = enricher.enrich_batch(SAMPLE_VN_ARTICLES)
@@ -132,7 +138,12 @@ def test_phase2_enricher(wm_articles):
     return enriched
 
 
-def test_phase3_groq(enriched_articles):
+def test_phase3_groq():
+    from src.scrapers.worldmonitor_fetcher import WorldMonitorFetcher
+    from src.core.article_enricher import ArticleEnricher
+    fetcher = WorldMonitorFetcher(timeout=10, max_items_per_feed=3, use_cache=True)
+    wm_articles = fetcher.fetch_flat(["vietnam"])
+    enriched_articles = ArticleEnricher(wm_articles).enrich_batch(SAMPLE_VN_ARTICLES[:2])
     separator("Phase 3: GroqSummarizer")
 
     api_key = os.environ.get("GROQ_API_KEY", "")
