@@ -28,8 +28,10 @@ from datetime import datetime, timedelta
 from functools import lru_cache
 from typing import Dict, List, Optional, Tuple, Any
 
+import asyncio
+import json
 import uvicorn
-from fastapi import FastAPI, HTTPException, Query, Header, Request, Depends
+from fastapi import FastAPI, HTTPException, Query, Header, Request, Depends, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
@@ -70,6 +72,18 @@ app.add_middleware(
 )
 
 db_manager = DatabaseManager(DB_PATH)
+
+# WebSocket signal broadcaster
+from src.core.signal_broadcaster import manager as ws_manager, SignalWatcher
+_signal_watcher = SignalWatcher(DB_PATH)
+
+@app.on_event("startup")
+async def _start_watcher():
+    asyncio.create_task(_signal_watcher.run())
+
+@app.on_event("shutdown")
+async def _stop_watcher():
+    _signal_watcher.stop()
 learning_manager = SentimentLearningManager(DB_PATH)
 keyword_extractor = KeywordExtractor(DB_PATH)
 
@@ -858,6 +872,87 @@ def generate_report_now(
                         for t in report.risk_alerts[:3]],
         "synthesis": report.synthesis,
         "generated_at": report.generated_at,
+    }
+
+
+# ── WebSocket v3: Real-time signal streaming ──────────────────────────────────
+
+@app.websocket("/api/v3/stream")
+async def websocket_stream(
+    websocket: WebSocket,
+    tickers: str = Query("", description="Comma-separated tickers, e.g. VCB,HPG,GAS"),
+    apikey: str = Query("", description="API key"),
+):
+    """
+    Real-time ticker signal stream via WebSocket.
+
+    Connect: ws://host/api/v3/stream?tickers=VCB,HPG&apikey=xxx
+
+    Message types received:
+      connected      — subscription confirmed
+      signal_update  — score/label changed for a subscribed ticker
+      intel_alert    — new WM critical/high global event
+      market_update  — overall market score change (broadcast)
+      ping           — keepalive every 30s
+
+    Send "ping" text to get "pong" response.
+    """
+    # Auth check
+    if API_KEYS != {"dev-key"} and apikey not in API_KEYS:
+        await websocket.close(code=4001, reason="Unauthorized")
+        return
+
+    ticker_list = [t.strip().upper() for t in tickers.split(",") if t.strip()]
+    if not ticker_list:
+        ticker_list = ["VCB", "HPG", "VIC", "GAS", "VNM"]  # defaults
+
+    await ws_manager.connect(websocket, ticker_list)
+    try:
+        # Send initial snapshot for each subscribed ticker
+        for ticker in ticker_list:
+            score, count, headline = _signal_watcher._compute_ticker_score(ticker)
+            await websocket.send_text(json.dumps({
+                "type": "snapshot",
+                "ticker": ticker,
+                "score": score,
+                "label": _score_to_label(score),
+                "article_count": count,
+                "latest_headline": headline[:100] if headline else "",
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+            }))
+
+        # Keepalive + receive loop
+        ping_counter = 0
+        while True:
+            try:
+                data = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
+                if data == "ping":
+                    await websocket.send_text(json.dumps({"type": "pong"}))
+            except asyncio.TimeoutError:
+                # Send server keepalive
+                await websocket.send_text(json.dumps({
+                    "type": "ping",
+                    "clients": ws_manager.connected_count,
+                    "timestamp": datetime.utcnow().isoformat() + "Z",
+                }))
+                ping_counter += 1
+            except WebSocketDisconnect:
+                break
+    finally:
+        ws_manager.disconnect(websocket)
+
+
+@app.get("/api/v3/stream/stats", tags=["WebSocket v3"])
+def ws_stats(api_key: str = Depends(get_api_key)):
+    """WebSocket connection stats."""
+    return {
+        "connected_clients": ws_manager.connected_count,
+        "subscriptions": {
+            t: ws_manager.ticker_subscriber_count(t)
+            for t in ws_manager._subscriptions
+            if ws_manager.ticker_subscriber_count(t) > 0
+        },
+        "watcher_running": _signal_watcher._running,
     }
 
 # ── Exception handlers ────────────────────────────────────────────────────────
