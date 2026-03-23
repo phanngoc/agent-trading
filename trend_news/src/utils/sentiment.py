@@ -687,6 +687,177 @@ def _score_vietnamese(text: str, use_bert: bool = True) -> float:
 
 
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Chinese financial lexicon — domain-specific for news headlines
+# ---------------------------------------------------------------------------
+_ZH_POSITIVE: list[tuple[str, float]] = [
+    # 大涨 / 上涨 / 涨幅
+    ("大涨", 0.75), ("暴涨", 0.85), ("飙升", 0.80), ("涨停", 0.70),
+    ("上涨", 0.40), ("反弹", 0.45), ("收涨", 0.40), ("走高", 0.35),
+    ("涨幅", 0.30), ("拉升", 0.45), ("跳涨", 0.60), ("连涨", 0.55),
+    ("突破", 0.55), ("创新高", 0.70), ("年内高", 0.60), ("阶段高", 0.50),
+    # 利好 / 盈利 / 增长
+    ("利好", 0.65), ("好消息", 0.55), ("超预期", 0.70), ("超出预期", 0.70),
+    ("净利润增", 0.65), ("营收增", 0.60), ("业绩增", 0.65), ("盈利增", 0.60),
+    ("业绩向好", 0.55), ("扭亏为盈", 0.80), ("转亏为盈", 0.80),
+    # 买入 / 增持
+    ("买入", 0.50), ("增持", 0.55), ("加仓", 0.50), ("回购", 0.45),
+    ("外资净买入", 0.60), ("北向资金净流入", 0.60), ("净流入", 0.50),
+    # 降息 / 宽松 / 刺激
+    ("降息", 0.60), ("降准", 0.60), ("宽松", 0.45), ("刺激", 0.40),
+    ("利率下调", 0.55), ("货币宽松", 0.50),
+    # 市场积极 / 走强
+    ("市场情绪好转", 0.55), ("情绪回暖", 0.50), ("资金流入", 0.50),
+    ("成交量放大", 0.35), ("量价齐升", 0.60),
+]
+
+_ZH_NEGATIVE: list[tuple[str, float]] = [
+    # 下跌 / 大跌 / 暴跌
+    ("暴跌", 0.85), ("大跌", 0.75), ("跌停", 0.75), ("大幅下跌", 0.75),
+    ("下跌", 0.55), ("跌幅", 0.45), ("走低", 0.35), ("收跌", 0.40),
+    ("大幅回落", 0.65), ("大幅下挫", 0.70), ("急跌", 0.65),
+    ("大幅走低", 0.65), ("全线下跌", 0.65), ("跌破", 0.55),
+    # 亏损 / 利空
+    ("亏损", 0.65), ("净亏损", 0.70), ("利空", 0.65), ("坏消息", 0.55),
+    ("业绩下滑", 0.60), ("营收下降", 0.55), ("净利润降", 0.60),
+    ("业绩不及预期", 0.65), ("低于预期", 0.60), ("不及预期", 0.55),
+    # 卖出 / 减持
+    ("卖出", 0.50), ("减持", 0.55), ("减仓", 0.50), ("抛售", 0.60),
+    ("外资净卖出", 0.60), ("北向资金净流出", 0.60), ("净流出", 0.50),
+    # 风险 / 危机 / 崩溃
+    ("风险", 0.35), ("危机", 0.70), ("崩溃", 0.85), ("暴雷", 0.80),
+    ("违约", 0.75), ("破产", 0.85), ("流动性危机", 0.80),
+    ("债务危机", 0.75), ("资金链断裂", 0.80),
+    # 加息 / 紧缩 / 制裁
+    ("加息", 0.65), ("升息", 0.65), ("缩表", 0.50), ("紧缩", 0.50),
+    ("制裁", 0.65), ("关税", 0.45), ("贸易战", 0.60),
+    # 市场情绪差
+    ("恐慌", 0.65), ("市场情绪低落", 0.55), ("信心不足", 0.50),
+    ("抛压", 0.50), ("资金流出", 0.50), ("流动性不足", 0.60),
+    # 爆炸 / 冲突 / 战争 (geopolitical → bearish for markets)
+    ("爆炸", 0.55), ("冲突升级", 0.65), ("战争", 0.70), ("军事冲突", 0.65),
+    ("袭击", 0.60), ("制裁升级", 0.70),
+]
+
+# Sort by length desc (longest match first)
+_ZH_POS_LEX: list[tuple[str, float]] = sorted(_ZH_POSITIVE, key=lambda x: -len(x[0]))
+_ZH_NEG_LEX: list[tuple[str, float]] = sorted(_ZH_NEGATIVE, key=lambda x: -len(x[0]))
+
+_ZH_NEGATION = ["不", "未", "没有", "无", "非", "反", "否"]
+
+
+def _score_chinese_financial(text: str) -> float:
+    """
+    Chinese financial sentiment scoring using domain-specific lexicon.
+    
+    Algorithm: same as VN lexicon_score (longest-match, negation, tanh)
+    Focus: financial headlines from wallstreetcn, jin10, cls, weibo, zhihu
+    """
+    weights: list[float] = []
+    matched_spans: list[tuple[int, int]] = []
+    
+    unified: list[tuple[str, float]] = (
+        [(term, +w) for term, w in _ZH_POS_LEX] +
+        [(term, -w) for term, w in _ZH_NEG_LEX]
+    )
+    unified.sort(key=lambda kv: -len(kv[0]))
+    
+    for term, signed_weight in unified:
+        idx = 0
+        while True:
+            pos = text.find(term, idx)
+            if pos == -1:
+                break
+            end = pos + len(term)
+            # Longest-first: skip overlapping spans
+            if not any(s <= pos < e or s < end <= e for s, e in matched_spans):
+                # Negation check (within 3 chars before term)
+                prefix = text[max(0, pos - 3): pos]
+                w = signed_weight
+                for neg in _ZH_NEGATION:
+                    if prefix.endswith(neg) or neg in prefix[-2:]:
+                        w = -w * 0.6
+                        break
+                weights.append(w)
+                matched_spans.append((pos, end))
+            idx = pos + 1
+    
+    if not weights:
+        # Fallback: try SnowNLP but only trust strong signals
+        if _snownlp_available and _SnowNLP:
+            try:
+                s = _SnowNLP(text[:128]).sentiments
+                # SnowNLP is biased — only use very strong signals
+                if s > 0.85:
+                    return 0.25   # cautious bullish
+                if s < 0.15:
+                    return -0.25  # cautious bearish
+            except Exception:
+                pass
+        return 0.0
+    
+    raw = sum(weights)
+    return math.tanh(raw * 0.35)
+
+
+# ---------------------------------------------------------------------------
+# English financial lexicon extension (for hackernews, reuters, ft etc.)
+# ---------------------------------------------------------------------------
+_EN_FIN_POSITIVE: list[tuple[str, float]] = [
+    ("record high", 0.75), ("all-time high", 0.75), ("beats expectations", 0.80),
+    ("strong earnings", 0.70), ("profit surge", 0.70), ("revenue growth", 0.75),
+    ("rate cut", 0.75), ("fed cuts", 0.80), ("dovish", 0.55),
+    ("rally", 0.65), ("surges", 0.70), ("soars", 0.65), ("jumps", 0.50),
+    ("buyback", 0.50), ("dividend increase", 0.60), ("upgrade", 0.55),
+    ("buy rating", 0.60), ("outperform", 0.55), ("overweight", 0.50),
+    ("gdp growth", 0.50), ("jobs added", 0.45), ("unemployment falls", 0.50),
+]
+
+_EN_FIN_NEGATIVE: list[tuple[str, float]] = [
+    ("crash", 0.80), ("collapse", 0.80), ("plunges", 0.75), ("tumbles", 0.65),
+    ("recession", 0.70), ("bear market", 0.65), ("selloff", 0.65),
+    ("rate hike", 0.55), ("fed hikes", 0.60), ("hawkish", 0.50),
+    ("misses expectations", 0.70), ("profit warning", 0.70), ("earnings miss", 0.70),
+    ("layoffs", 0.60), ("job cuts", 0.60), ("bankruptcy", 0.85),
+    ("downgrade", 0.60), ("sell rating", 0.65), ("underperform", 0.55),
+    ("war", 0.60), ("sanctions", 0.75), ("tariffs", 0.45), ("default", 0.75),
+    ("inflation surges", 0.65), ("yields spike", 0.55),
+]
+
+_EN_POS_LEX: list[tuple[str, float]] = sorted(_EN_FIN_POSITIVE, key=lambda x: -len(x[0]))
+_EN_NEG_LEX: list[tuple[str, float]] = sorted(_EN_FIN_NEGATIVE, key=lambda x: -len(x[0]))
+
+
+_EN_DOMAIN_RE = re.compile(
+    r'\b(stock|market|index|share|fund|etf|rate|fed|gdp|cpi|yield|bond|'
+    r'earnings|profit|revenue|rally|crash|sell.?off|recession|inflation|'
+    r'trade|tariff|sanction|sanctions|bank|invest|crypto|bitcoin|oil|gold|'
+    r'upgrade|downgrade|overweight|underweight|buyback|dividend|ipo|merger|acquisition)\b',
+    re.IGNORECASE
+)
+
+def _score_english_financial(text: str) -> float:
+    """English financial sentiment — lexicon + VADER blend.
+    Only activates for finance-domain text to avoid false positives
+    on tech/general EN articles (hackernews etc.)
+    """
+    # Domain gate: only score if text is finance-relevant
+    if not _EN_DOMAIN_RE.search(text):
+        return 0.0
+    lex = _lexicon_score(text.lower(), _EN_POS_LEX, _EN_NEG_LEX)
+    
+    if _vader_available and _vader:
+        vader_score = float(_vader.polarity_scores(text[:512])["compound"])
+        if abs(lex) >= 0.15:
+            # Lexicon signal strong — blend 70/30
+            return lex * 0.70 + vader_score * 0.30
+        elif abs(vader_score) >= 0.20:
+            # VADER signal only
+            return vader_score * 0.50   # dampen general VADER
+    return lex
+
+
 # Singleton SentimentAnalyzer — public API unchanged
 # ---------------------------------------------------------------------------
 class SentimentAnalyzer:
@@ -708,16 +879,10 @@ class SentimentAnalyzer:
             if _is_vietnamese(text):
                 compound = _score_vietnamese(text[:512])
             elif _is_chinese(text):
-                # SnowNLP trained on product/movie reviews → systematically wrong for
-                # financial/news text (P(pos) ≈ 0.03 for neutral news → Bearish).
-                # Benchmark: ZH accuracy 53% with SnowNLP vs ~75% with Neutral fallback.
-                # Decision: return Neutral for Chinese until a financial-domain ZH model
-                # is available. This avoids false Bearish signals on neutral ZH news.
-                compound = 0.0
-            elif _vader_available:
-                compound = float(_vader.polarity_scores(text[:512])["compound"])
+                compound = _score_chinese_financial(text)
             else:
-                return 0.0, "Neutral"
+                compound = _score_english_financial(text)
+                # No VADER fallback to prevent false positives on non-financial EN text
             return float(compound), _score_to_label(compound)
         except Exception as e:
             print(f"Sentiment analysis error: {e}")
