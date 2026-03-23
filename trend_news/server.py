@@ -656,6 +656,107 @@ def combined_lexicon(api_key: str = Depends(get_api_key)):
 
 
 
+
+# ── Market Price endpoints ────────────────────────────────────────────────────
+
+@app.get("/api/v2/prices/{ticker}", tags=["Market Data"])
+def get_ticker_price(
+    ticker: str,
+    api_key: str = Depends(get_api_key),
+):
+    """
+    Real-time price data for a VN ticker.
+    Source: Yahoo Finance (.VN) with CafeF fallback.
+    Returns: close, open, high, low, volume, change_pct, trade_date.
+    """
+    from src.core.market_data import MarketDataFetcher
+    fetcher = MarketDataFetcher(db_path=DB_PATH)
+    price = fetcher.get_price(ticker.upper())
+    if not price:
+        raise HTTPException(status_code=404, detail={
+            "code": "PRICE_NOT_FOUND",
+            "message": f"No price data for {ticker}",
+        })
+    return {
+        "ticker": price.ticker, "close": price.close,
+        "open": price.open, "high": price.high, "low": price.low,
+        "volume": price.volume, "change": price.change,
+        "change_pct": price.change_pct, "prev_close": price.prev_close,
+        "trade_date": price.trade_date, "source": price.source,
+    }
+
+
+@app.post("/api/v2/prices/batch", tags=["Market Data"])
+def get_prices_batch(
+    body: TickerBatchRequest,
+    api_key: str = Depends(get_api_key),
+):
+    """Batch price data for multiple tickers (up to 30)."""
+    from src.core.market_data import MarketDataFetcher
+    fetcher = MarketDataFetcher(db_path=DB_PATH)
+    results = {}
+    for ticker in [t.upper() for t in body.tickers]:
+        price = fetcher.get_price(ticker)
+        if price:
+            results[ticker] = {
+                "close": price.close, "change_pct": price.change_pct,
+                "volume": price.volume, "trade_date": price.trade_date,
+                "source": price.source,
+            }
+        else:
+            results[ticker] = None
+    return {"prices": results, "timestamp": datetime.utcnow().isoformat() + "Z"}
+
+
+@app.get("/api/v2/signals/{ticker}", tags=["Market Data"])
+def get_enriched_signal(
+    ticker: str,
+    days_back: int = Query(7, ge=1, le=30),
+    api_key: str = Depends(get_api_key),
+):
+    """
+    Sentiment × Price enriched trading signal.
+    Combines news sentiment + price action → combined_signal:
+    strong_buy / buy / hold / sell / strong_sell
+    """
+    from src.core.market_data import MarketDataFetcher
+    fetcher = MarketDataFetcher(db_path=DB_PATH)
+
+    # Get sentiment
+    ticker = ticker.upper()
+    aliases = TICKER_ALIASES.get(ticker)
+    if not aliases:
+        raise HTTPException(status_code=404, detail={"code": "TICKER_NOT_FOUND"})
+
+    from datetime import timedelta
+    start = (datetime.utcnow() - timedelta(days=days_back)).date().isoformat()
+    articles = db_manager.get_filtered_news(start_date=start, tickers=ticker, limit=100)
+
+    scores = [_resolve_sentiment(a)[0] for a in articles] if articles else []
+    avg_score = sum(scores) / len(scores) if scores else 0.0
+    label = _score_to_av_label(avg_score)
+
+    # Enrich with price
+    enriched = fetcher.enrich_signal(ticker, avg_score, label)
+    price = enriched.price
+
+    return {
+        "ticker": ticker,
+        "company": aliases[0],
+        "combined_signal": enriched.combined_signal,
+        "sentiment_score": avg_score,
+        "sentiment_label": label,
+        "article_count": len(articles),
+        "price": {
+            "close": price.close if price else None,
+            "change_pct": price.change_pct if price else None,
+            "volume": price.volume if price else None,
+            "trade_date": price.trade_date if price else None,
+        } if price else None,
+        "reasoning": enriched.reasoning,
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+    }
+
 # ── API v2: Batch + Sectors + Heatmap ────────────────────────────────────────
 
 class TickerBatchRequest(BaseModel):
