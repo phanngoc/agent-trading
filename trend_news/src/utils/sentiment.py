@@ -261,6 +261,25 @@ _VI_POSITIVE: Dict[str, float] = {
     # ── Kết quả vượt / đạt cao ──────────────────────────────────────────────
     "kết quả vượt": 0.65, "kết quả tốt": 0.60, "kết quả tích cực": 0.65,
     "doanh thu tăng mạnh": 0.75, "lợi nhuận kỷ lục": 0.85,
+
+    # ── VN stock specific: chỉ số / thị trường ───────────────────────────────
+    "vượt mốc": 0.65, "chinh phục mốc": 0.65, "vượt ngưỡng": 0.60,
+    "dòng tiền ngoại": 0.55, "ngoại mua ròng": 0.65, "khối ngoại mua ròng": 0.65,
+    "thanh khoản cải thiện": 0.55, "thanh khoản tăng": 0.45,
+    "breadth tích cực": 0.55, "độ rộng tích cực": 0.50,
+
+    # ── Hợp đồng / xuất khẩu / dự án ────────────────────────────────────────
+    "ký hợp đồng": 0.60, "ký kết hợp đồng lớn": 0.75,
+    "ký hợp đồng xuất khẩu": 0.70, "hợp đồng xuất khẩu lớn": 0.75,
+    "xuất khẩu tăng": 0.55, "đơn hàng xuất khẩu": 0.50,
+    "trúng thầu dự án": 0.70, "được chọn thầu": 0.65,
+    "nhận đơn hàng": 0.55, "nhận hợp đồng mới": 0.60,
+    "ký biên bản ghi nhớ": 0.45, "ký mou": 0.45,
+
+    # ── Cổ phiếu vào rổ / nâng hạng ─────────────────────────────────────────
+    "vào rổ vn30": 0.70, "vào rổ vnmidcap": 0.60, "vào rổ etf": 0.60,
+    "thêm vào danh mục": 0.55, "được nâng hạng": 0.65,
+    "thị trường mới nổi": 0.60, "nâng hạng thị trường": 0.65,
 }
 
 _VI_NEGATIVE: Dict[str, float] = {
@@ -388,11 +407,36 @@ _VI_NEGATIVE: Dict[str, float] = {
 
     # ── Sụt giảm doanh thu / vĩ mô xấu ──────────────────────────────────────
     "sốt giá": 0.45, "leo thang giá": 0.45,
-    "tín dụng xấu": 0.55, "nợ xấu tăng": 0.65, "nợ xấu": 0.50,
+    "tín dụng xấu": 0.55, "nợ xấu tăng": 0.75, "nợ xấu tăng cao": 0.80, "nợ xấu": 0.50,
     "doanh thu giảm": 0.55, "lợi nhuận giảm": 0.60,
     "doanh thu sụt": 0.60, "lợi nhuận sụt": 0.65,
     "bị phạt": 0.45, "xử phạt": 0.45, "truy thu": 0.40,
     "chậm tiến độ": 0.40, "dừng dự án": 0.55,
+
+    # ── VN stock specific: hủy niêm yết / mất trắng ──────────────────────────
+    "hủy niêm yết": 0.85, "huỷ niêm yết": 0.85,
+    "bị hủy niêm yết": 0.85, "bị huỷ niêm yết": 0.85,
+    "mất trắng": 0.80, "mất hết vốn": 0.85, "trắng tay": 0.80,
+    "cưỡng chế niêm yết": 0.75, "đình chỉ giao dịch": 0.75,
+    "tạm dừng giao dịch": 0.60, "bị tạm dừng niêm yết": 0.70,
+    "vào diện đình chỉ": 0.75, "bị đình chỉ": 0.65,
+
+    # ── Tiếp tục giảm / không phục hồi ───────────────────────────────────────
+    "tiếp tục giảm": 0.55, "tiếp tục lao dốc": 0.70, "tiếp tục đỏ": 0.55,
+    "tiếp tục sụt giảm": 0.65, "chưa có dấu hiệu phục hồi": 0.65,
+    "không có dấu hiệu phục hồi": 0.70, "khó phục hồi": 0.55,
+    "chưa thể phục hồi": 0.60, "xa đà giảm": 0.55,
+
+    # ── Thấp hơn kỳ vọng / dưới dự báo ──────────────────────────────────────
+    "thấp hơn kỳ vọng": 0.60, "thấp hơn dự báo": 0.60,
+    "dưới dự báo": 0.55, "dưới kỳ vọng": 0.55,
+    "thấp hơn mục tiêu": 0.55, "không đạt kỳ vọng": 0.60,
+
+    # ── Ngoại bán ròng / dòng tiền ra ────────────────────────────────────────
+    "khối ngoại bán ròng": 0.75, "ngoại bán ròng mạnh": 0.80,
+    "ngoại bán ròng": 0.65,
+    "dòng tiền ngoại ra": 0.60, "vốn ngoại tháo chạy": 0.75,
+    "outflow": 0.55, "rút ròng": 0.55,
 }
 
 # Pre-sort descending by phrase length (longest match wins)
@@ -538,19 +582,20 @@ def _lexicon_direction(text: str) -> Optional[str]:
 def _score_to_label(compound: float) -> str:
     """Map compound score to sentiment label.
 
-    Thresholds optimized via fine-grain grid search on 2105 real VI news articles:
-      Best: Bearish<=-0.375, Somewhat-Bearish<=-0.200, Neutral<0.125,
-            Somewhat-Bullish<0.275, Bullish>=0.275  → 83.1% exact-match accuracy
+    Thresholds tuned for VN stock trading signals:
+      Bearish<=-0.300, Somewhat-Bearish<=-0.150, Neutral<0.125,
+      Somewhat-Bullish<0.200, Bullish>=0.200
 
-    Compared to previous defaults (±0.35/±0.15): +3.1pp gain.
+    Rationale: Trading agents need stronger signals → lower thresholds
+    reduce false "Somewhat" labels on clear bull/bear events.
     """
-    if compound <= -0.375:
+    if compound <= -0.300:
         return "Bearish"
-    elif compound <= -0.200:
+    elif compound <= -0.150:
         return "Somewhat-Bearish"
     elif compound < 0.125:
         return "Neutral"
-    elif compound < 0.275:
+    elif compound < 0.200:
         return "Somewhat-Bullish"
     else:
         return "Bullish"
