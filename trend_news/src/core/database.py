@@ -27,6 +27,7 @@ class DatabaseManager:
             cursor = conn.cursor()
             self._ensure_schema(cursor)
             self._ensure_wm_schema(cursor)
+            self._migrate_add_enrichment_columns(cursor)
             conn.commit()
         finally:
             conn.close()
@@ -354,6 +355,21 @@ class DatabaseManager:
         cursor.execute("ALTER TABLE news_articles ADD COLUMN sentiment_score REAL")
         cursor.execute("ALTER TABLE news_articles ADD COLUMN sentiment_label TEXT")
         print("DB migration (Phase 3) complete.")
+
+    def _migrate_add_enrichment_columns(self, cursor):
+        """Phase 4: Add WM enrichment columns (idempotent)."""
+        cursor.execute("PRAGMA table_info(news_articles)")
+        existing = {r[1] for r in cursor.fetchall()}
+        new_cols = {
+            "threat_level":  "TEXT",
+            "geo_relevance": "REAL DEFAULT 0.0",
+            "market_signal": "TEXT",
+            "wm_sources":    "TEXT",    # JSON array
+        }
+        for col, col_type in new_cols.items():
+            if col not in existing:
+                cursor.execute(f"ALTER TABLE news_articles ADD COLUMN {col} {col_type}")
+                print(f"  + Added column: {col}")
 
     def save_news(self, results: Dict, id_to_name: Dict) -> int:
         """

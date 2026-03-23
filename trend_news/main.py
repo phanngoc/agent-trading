@@ -1,3 +1,4 @@
+import json
 """
 TrendRadar - Fully Independent Refactored Version
 
@@ -392,13 +393,17 @@ class NewsAnalyzer:
                 print(f"  ✓ {len(wm_articles)} global articles fetched")
 
                 if wm_articles:
-                    # Save WM articles to wm_articles table (Option B)
+                    enricher = self.wm_enricher_cls(wm_articles, max_context_items=3)
+                    # Pre-compute geo_relevance for WM articles (uses VN keyword scoring)
+                    for wm_art in wm_articles:
+                        if wm_art.get("geo_relevance", 0.0) == 0.0:
+                            wm_art["geo_relevance"] = enricher._geo_relevance(wm_art.get("title", ""))
+
+                    # Save WM articles to wm_articles table (Option B) — after geo_relevance computed
                     try:
                         self.db_manager.save_wm_articles(wm_articles)
                     except Exception as e:
                         print(f"  ⚠ WM DB save error (non-fatal): {e}")
-
-                    enricher = self.wm_enricher_cls(wm_articles, max_context_items=3)
                     enriched_count = 0
 
                     for platform_id, platform_data in results.items():
@@ -416,7 +421,8 @@ class NewsAnalyzer:
                         enriched_items = enricher.enrich_batch(items_list)
                         enriched_count += len(enriched_items)
 
-                        # Write back enrichment fields into existing title-keyed dict
+                        # Write back enrichment fields into existing title-keyed dict + persist
+                        url_to_enrichment = {}
                         for enriched in enriched_items:
                             t = enriched.get("title", "")
                             if t in platform_data and isinstance(platform_data[t], dict):
@@ -424,9 +430,33 @@ class NewsAnalyzer:
                                 platform_data[t]["geo_relevance"] = enriched.get("geo_relevance", 0)
                                 platform_data[t]["market_signal"] = enriched.get("market_signal", "neutral")
                                 platform_data[t]["wm_sources"] = enriched.get("wm_sources", [])
-                                # Store global_context as JSON-safe list of titles only
                                 ctx = enriched.get("global_context", [])
                                 platform_data[t]["global_context"] = [c.get("title", "") for c in ctx[:3]]
+                                url = platform_data[t].get("url", "")
+                                if url:
+                                    url_to_enrichment[url] = {
+                                        "threat_level": enriched.get("threat_level", "info"),
+                                        "geo_relevance": enriched.get("geo_relevance", 0),
+                                        "market_signal": enriched.get("market_signal", "neutral"),
+                                        "wm_sources": json.dumps(enriched.get("wm_sources", [])),
+                                    }
+                        # Persist enrichment to DB
+                        if url_to_enrichment:
+                            try:
+                                import json as _json
+                                conn = self.db_manager._get_connection()
+                                c = conn.cursor()
+                                for url, fields in url_to_enrichment.items():
+                                    c.execute("""
+                                        UPDATE news_articles
+                                        SET threat_level=?, geo_relevance=?, market_signal=?, wm_sources=?
+                                        WHERE url=?
+                                    """, (fields["threat_level"], fields["geo_relevance"],
+                                          fields["market_signal"], fields["wm_sources"], url))
+                                conn.commit()
+                                conn.close()
+                            except Exception:
+                                pass
 
                     # Inject WM global articles as a virtual platform
                     # Format must match results format: {title: {"ranks": [n], "url": ..., "mobileUrl": ...}}
@@ -532,12 +562,44 @@ class NewsAnalyzer:
 
         return summary_html
 
+    def _auto_score_unscored(self) -> None:
+        """Run lexicon scorer on unscored articles after crawl."""
+        try:
+            from src.utils.sentiment import get_sentiment
+            conn = self.db_manager._get_connection()
+            try:
+                c = conn.cursor()
+                c.execute("""
+                    SELECT id, title FROM news_articles
+                    WHERE sentiment_score IS NULL
+                    ORDER BY crawled_at DESC LIMIT 500
+                """)
+                rows = c.fetchall()
+                if not rows:
+                    return
+                updates = []
+                for art_id, title in rows:
+                    score, label = get_sentiment(title)
+                    updates.append((score, label, art_id))
+                c.executemany(
+                    "UPDATE news_articles SET sentiment_score=?, sentiment_label=? WHERE id=?",
+                    updates
+                )
+                conn.commit()
+                print(f"  ✓ Auto-scored {len(updates)} articles")
+            finally:
+                conn.close()
+        except Exception as e:
+            print(f"  ⚠ Auto-score error (non-fatal): {e}")
+
     def run(self) -> None:
         try:
             self._initialize_and_check_config()
             mode_strategy = self._get_mode_strategy()
             results, id_to_name, failed_ids = self._crawl_data()
             self._execute_mode_strategy(mode_strategy, results, id_to_name, failed_ids)
+            # Auto-score unscored articles after crawl (Batch 3)
+            self._auto_score_unscored()
         except Exception as e:
             print(f"phân tích流程执行出错: {e}")
             raise
