@@ -41,6 +41,16 @@ SELECTORS: Dict[str, List[str]] = {
     "wallstreetcn-news":  ["[class*='_articleBody']", ".article__content", ".article-body"],
     "cls":                [".article-content", ".detail-content", "article"],
     "jin10":              [".flash-detail", ".jin-layout", ".jin-detail", ".article-content", "article"],
+    # Other sources
+    "hackernews":         [".comment-tree", ".comment"],
+    "solidot":            [".p_mainnew", ".about_at", ".articleBox"],
+    "zaobao":             [".col-lg-8", ".content_detailnews", ".articleDetails"],
+    "vietnamfinance-batdongsan": [".content_detailnews", ".detail-content", ".article-content"],
+    "vietnamfinance-":    [".content_detailnews", ".detail-content", ".article-content"],
+    "thepaper":           [".news_txt", ".article__content", ".detail_content"],
+    "gelonghui":          [".article-content", ".rich_media_content", ".content"],
+    "kaopu":              [".article-body", ".content", ".news-content"],
+    "sputniknewscn":      [".article__body", ".article-body", ".article-text"],
 }
 
 FALLBACK_SELECTORS = ["article", "main", ".article", ".content", ".post", "[class*='article']", "[class*='content']"]
@@ -54,11 +64,17 @@ _HEADERS = {
 
 _CN_NAV_NOISE = re.compile(r"^首页\s*[^\n]{0,60}分享[：:][^\n]{0,30}\n?")
 
+_JIN10_SUFFIX = re.compile(r"\s*JIN10\.COM.*$", re.DOTALL)
+
 def _clean_cn_noise(text: str) -> str:
-    """Remove jin10/cn navigation prefix noise."""
+    """Remove jin10/cn navigation prefix/suffix noise."""
     text = _CN_NAV_NOISE.sub("", text)
     # Remove timestamps like "2026-02-15 周日 12:54:05"
     text = re.sub(r"\d{4}-\d{2}-\d{2}\s+\w+\s+\d{2}:\d{2}:\d{2}\s*", "", text)
+    # Strip jin10 site footer
+    text = _JIN10_SUFFIX.sub("", text)
+    # Strip common risk disclaimers
+    text = re.sub(r"\s*风险提示.*$", "", text, flags=re.DOTALL)
     return text.strip()
 
 
@@ -79,11 +95,14 @@ def _extract_text(html: str, source_id: str) -> str:
         if el:
             text = el.get_text(separator=" ", strip=True)
             text = re.sub(r"\s+", " ", text).strip()
-            if len(text) > 100:
+            # For flash/quick news sources allow shorter content
+            min_len = 30 if any(s in source_id for s in ["jin10", "mktnews", "cls-hot", "wallstreetcn-quick"]) else 100
+            if len(text) > min_len:
                 # Clean CN navigation noise for CN sources
                 if any(s in source_id for s in ["jin10", "wallstreetcn", "cls", "zaobao", "gelonghui"]):
                     text = _clean_cn_noise(text)
-                return text[:MAX_CONTENT_LEN]
+                if len(text) > 10:  # after cleaning, still has substance
+                    return text[:MAX_CONTENT_LEN]
 
     # Wallstreetcn special: look for div with timestamp pattern (livenews format)
     if "wallstreetcn" in source_id:
