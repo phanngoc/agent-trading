@@ -4,4 +4,4 @@ output/
 .venv/
 .env
 .chainlit
-.files/
+.files/models/cache/
