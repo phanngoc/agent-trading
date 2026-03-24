@@ -740,7 +740,7 @@ _ZH_NEGATIVE: list[tuple[str, float]] = [
     # 加息 / 紧缩 / 制裁
     ("加息", 0.65), ("升息", 0.65), ("缩表", 0.50), ("紧缩", 0.50),
     ("净回笼", 0.55), ("逆回购净回笼", 0.60), ("资金净回笼", 0.55),  # liquidity drain
-    ("国债收益率创高", 0.55), ("国债收益率为.*高点", 0.55),  # yield highs = bearish
+    ("国债收益率创高", 0.55), ("国债收益率高点", 0.55), ("国债收益率年内高", 0.55),  # yield highs = bearish
     ("制裁", 0.65), ("关税", 0.45), ("贸易战", 0.60),
     # 市场情绪差
     ("恐慌", 0.65), ("市场情绪低落", 0.55), ("信心不足", 0.50),
@@ -841,7 +841,7 @@ _EN_FIN_POSITIVE: list[tuple[str, float]] = [
     ("lowest level in", 0.50), ("lowest since", 0.50),
     ("trade deal", 0.60), ("trade agreement", 0.60), ("investment boom", 0.65),
     ("commits investment", 0.55), ("pledges investment", 0.55),
-    ("committed to invest", 0.60), ("to invest", 0.45),
+    ("committed to invest", 0.60), ("plans to invest", 0.50), ("will invest", 0.45),
     ("economic recovery", 0.55), ("economic growth", 0.55),
 ]
 
@@ -862,7 +862,7 @@ _EN_FIN_NEGATIVE: list[tuple[str, float]] = [
     # Yield highs — bearish for bonds/equities
     ("yields spike", 0.55), ("yield hit", 0.50), ("yields hit", 0.50),
     ("yield highest", 0.65), ("yields highest", 0.65), ("yield surge", 0.60),
-    ("16-year high", 0.65), ("highest since", 0.40),
+    ("16-year high", 0.65), ("yield highest since", 0.55), ("yields highest since", 0.55),
     # Losses
     ("loan losses", 0.65), ("massive losses", 0.70), ("credit losses", 0.65),
     ("tech stocks fall", 0.55), ("stocks fall", 0.55),

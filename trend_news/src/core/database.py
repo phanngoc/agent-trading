@@ -552,6 +552,11 @@ class DatabaseManager:
         if source_id:
             where_parts.append("a.source_id = ?")
             params.append(source_id)
+        else:
+            # Exclude non-financial sources from default ticker search too
+            placeholders = ",".join("?" * len(NON_FINANCIAL_SOURCES))
+            where_parts.append(f"a.source_id NOT IN ({placeholders})")
+            params.extend(sorted(NON_FINANCIAL_SOURCES))
 
         params.append(limit)
 
