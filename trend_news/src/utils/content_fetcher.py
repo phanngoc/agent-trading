@@ -35,7 +35,10 @@ SELECTORS: Dict[str, List[str]] = {
     "vietnamfinance":     [".article-content", ".content-detail", ".fck_detail"],
     "dantri":             [".singular-content", ".article-content"],
     # CN sources
-    "wallstreetcn":       ["[class*='_articleBody']", ".article__content", ".live-detail__body", "[class*='articleBody']", ".p-\\[15px\\]"],
+    "wallstreetcn":       ["[class*='_articleBody']", ".article__content", ".live-detail__body", "[class*='articleBody']"],
+    # wallstreetcn livenews: use pt-9 or antialiased (Tailwind classes, need attr selector)
+    "wallstreetcn-quick": ["[class*='_articleBody']", "[class='antialiased']", "[class*='p-[15px]']"],
+    "wallstreetcn-news":  ["[class*='_articleBody']", ".article__content", ".article-body"],
     "cls":                [".article-content", ".detail-content", "article"],
     "jin10":              [".flash-detail", ".jin-layout", ".jin-detail", ".article-content", "article"],
 }
@@ -81,6 +84,19 @@ def _extract_text(html: str, source_id: str) -> str:
                 if any(s in source_id for s in ["jin10", "wallstreetcn", "cls", "zaobao", "gelonghui"]):
                     text = _clean_cn_noise(text)
                 return text[:MAX_CONTENT_LEN]
+
+    # Wallstreetcn special: look for div with timestamp pattern (livenews format)
+    if "wallstreetcn" in source_id:
+        import re as _re
+        for tag in soup.find_all("div"):
+            text = tag.get_text(separator=" ", strip=True)
+            text = _re.sub(r"\s+", " ", text).strip()
+            # Livenews format: "HH:MM text content"
+            if _re.match(r"\d{2}/\d{2}\s+\d{2}:\d{2}", text) and 50 < len(text) < 1000:
+                text = _re.sub(r"^\d{2}/\d{2}\s+\d{2}:\d{2}\s*", "", text)
+                text = _re.sub(r"\s*风险提示.*$", "", text, flags=_re.DOTALL).strip()
+                if len(text) > 30:
+                    return text[:MAX_CONTENT_LEN]
 
     # Last resort: find the tag with most text
     candidates = [(len(tag.get_text(strip=True)), tag) for tag in soup.find_all(["div", "section", "article"])]
