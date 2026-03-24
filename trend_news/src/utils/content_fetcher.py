@@ -145,7 +145,9 @@ class ContentFetcher:
                 resp = requests.get(url, headers=_HEADERS, timeout=timeout, allow_redirects=True)
                 resp.raise_for_status()
                 # Force UTF-8 for CN sources that send wrong charset header
-                if any(src in source_id for src in ["wallstreetcn", "cls", "jin10", "gelonghui", "zaobao", "cankaoxiaoxi", "thepaper", "kaopu", "sputniknewscn"]):
+                if "zaobao" in source_id or "zaochenbao" in source_id:
+                    resp.encoding = "gbk"  # zaobao uses GBK
+                elif any(src in source_id for src in ["wallstreetcn", "cls", "jin10", "gelonghui", "cankaoxiaoxi", "thepaper", "kaopu", "sputniknewscn"]):
                     resp.encoding = "utf-8"
                 else:
                     resp.encoding = resp.apparent_encoding or "utf-8"
@@ -189,7 +191,15 @@ class ContentFetcher:
                 for attempt in range(RETRY + 1):
                     try:
                         async with session.get(url, headers=_HEADERS, timeout=aiohttp.ClientTimeout(total=TIMEOUT)) as resp:
-                            html = await resp.text(errors="replace")
+                            # Handle source-specific encodings
+                            if "zaobao" in source_id or "zaochenbao" in source_id:
+                                raw = await resp.read()
+                                html = raw.decode("gbk", errors="replace")
+                            elif any(s in source_id for s in ["wallstreetcn","cls","jin10","gelonghui","thepaper","kaopu","sputniknewscn"]):
+                                raw = await resp.read()
+                                html = raw.decode("utf-8", errors="replace")
+                            else:
+                                html = await resp.text(errors="replace")
                             text = _extract_text(html, source_id)
                             if text:
                                 results[aid] = text
