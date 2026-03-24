@@ -5,3 +5,4 @@ output/
 .env
 .chainlit
 .files/models/cache/
+.files/
