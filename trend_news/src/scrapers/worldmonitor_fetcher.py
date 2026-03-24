@@ -208,10 +208,18 @@ def _parse_rss(xml_text: str, source_name: str, category: str) -> List[Dict]:
 
             threat = classify_threat(title)
 
+            # Extract summary/description as content
+            summary = _get("description") or _get("summary") or _get("content")
+            summary = re.sub(r"<!\[CDATA\[(.*?)\]\]>", r"\1", summary, flags=re.DOTALL).strip()
+            # Strip HTML tags from summary
+            summary = re.sub(r"<[^>]+>", " ", summary)
+            summary = re.sub(r"\s+", " ", summary).strip()[:1000]
+
             items.append({
                 "title": title,
                 "url": link,
                 "mobileUrl": "",
+                "content": summary or None,
                 "source": source_name,
                 "wm_category": category,
                 "threat_level": threat["level"],

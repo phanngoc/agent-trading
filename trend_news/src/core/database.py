@@ -89,6 +89,15 @@ class DatabaseManager:
         if "sentiment_score" not in columns_now:
             self._migrate_add_sentiment_columns(cursor)
 
+        # Phase 4: enrichment columns
+        self._migrate_add_enrichment_columns(cursor)
+
+        # Phase 5: content column (idempotent)
+        cursor.execute("PRAGMA table_info(news_articles)")
+        columns_now5 = {row[1] for row in cursor.fetchall()}
+        if "content" not in columns_now5:
+            cursor.execute("ALTER TABLE news_articles ADD COLUMN content TEXT")
+
         # Always ensure FTS5 index is present (idempotent)
         self._ensure_fts_index(cursor)
 
@@ -414,6 +423,7 @@ class DatabaseManager:
                     mobile_url = info.get("mobileUrl", "")
                     ranks = info.get("ranks", [])
                     ranks_str = ",".join(map(str, ranks))
+                    content = info.get("content") or None
 
                     data_to_insert.append((
                         source_id,
@@ -423,12 +433,13 @@ class DatabaseManager:
                         ranks_str,
                         current_time,
                         crawl_date,
+                        content,
                     ))
 
             cursor.executemany("""
                 INSERT OR IGNORE INTO news_articles
-                    (source_id, title, url, mobile_url, ranks, crawled_at, crawl_date)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                    (source_id, title, url, mobile_url, ranks, crawled_at, crawl_date, content)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, data_to_insert)
 
             conn.commit()
