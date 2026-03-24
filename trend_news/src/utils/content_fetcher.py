@@ -35,9 +35,9 @@ SELECTORS: Dict[str, List[str]] = {
     "vietnamfinance":     [".article-content", ".content-detail", ".fck_detail"],
     "dantri":             [".singular-content", ".article-content"],
     # CN sources
-    "wallstreetcn":       [".article__content", ".article-content", ".live-detail__body", ".content"],
+    "wallstreetcn":       ["[class*='_articleBody']", ".article__content", ".live-detail__body", "[class*='articleBody']", ".p-\\[15px\\]"],
     "cls":                [".article-content", ".detail-content", "article"],
-    "jin10":              [".flash-detail", ".jin-detail", ".article-content", "article"],
+    "jin10":              [".flash-detail", ".jin-layout", ".jin-detail", ".article-content", "article"],
 }
 
 FALLBACK_SELECTORS = ["article", "main", ".article", ".content", ".post", "[class*='article']", "[class*='content']"]
@@ -47,6 +47,16 @@ _HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "vi-VN,vi;q=0.9,en;q=0.8",
 }
+
+
+_CN_NAV_NOISE = re.compile(r"^首页\s*[^\n]{0,60}分享[：:][^\n]{0,30}\n?")
+
+def _clean_cn_noise(text: str) -> str:
+    """Remove jin10/cn navigation prefix noise."""
+    text = _CN_NAV_NOISE.sub("", text)
+    # Remove timestamps like "2026-02-15 周日 12:54:05"
+    text = re.sub(r"\d{4}-\d{2}-\d{2}\s+\w+\s+\d{2}:\d{2}:\d{2}\s*", "", text)
+    return text.strip()
 
 
 def _extract_text(html: str, source_id: str) -> str:
@@ -67,6 +77,9 @@ def _extract_text(html: str, source_id: str) -> str:
             text = el.get_text(separator=" ", strip=True)
             text = re.sub(r"\s+", " ", text).strip()
             if len(text) > 100:
+                # Clean CN navigation noise for CN sources
+                if any(s in source_id for s in ["jin10", "wallstreetcn", "cls", "zaobao", "gelonghui"]):
+                    text = _clean_cn_noise(text)
                 return text[:MAX_CONTENT_LEN]
 
     # Last resort: find the tag with most text
@@ -97,7 +110,7 @@ class ContentFetcher:
                 resp = requests.get(url, headers=_HEADERS, timeout=timeout, allow_redirects=True)
                 resp.raise_for_status()
                 # Force UTF-8 for CN sources that send wrong charset header
-                if any(src in source_id for src in ["wallstreetcn", "cls", "jin10", "gelonghui", "zaobao"]):
+                if any(src in source_id for src in ["wallstreetcn", "cls", "jin10", "gelonghui", "zaobao", "cankaoxiaoxi", "thepaper", "kaopu", "sputniknewscn"]):
                     resp.encoding = "utf-8"
                 else:
                     resp.encoding = resp.apparent_encoding or "utf-8"
