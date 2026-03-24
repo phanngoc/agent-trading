@@ -35,9 +35,9 @@ SELECTORS: Dict[str, List[str]] = {
     "vietnamfinance":     [".article-content", ".content-detail", ".fck_detail"],
     "dantri":             [".singular-content", ".article-content"],
     # CN sources
-    "wallstreetcn":       [".article-content", ".content", "article"],
+    "wallstreetcn":       [".article__content", ".article-content", ".live-detail__body", ".content"],
     "cls":                [".article-content", ".detail-content", "article"],
-    "jin10":              [".article-content", "article", ".content"],
+    "jin10":              [".flash-detail", ".jin-detail", ".article-content", "article"],
 }
 
 FALLBACK_SELECTORS = ["article", "main", ".article", ".content", ".post", "[class*='article']", "[class*='content']"]
@@ -96,7 +96,11 @@ class ContentFetcher:
             try:
                 resp = requests.get(url, headers=_HEADERS, timeout=timeout, allow_redirects=True)
                 resp.raise_for_status()
-                resp.encoding = resp.apparent_encoding or "utf-8"
+                # Force UTF-8 for CN sources that send wrong charset header
+                if any(src in source_id for src in ["wallstreetcn", "cls", "jin10", "gelonghui", "zaobao"]):
+                    resp.encoding = "utf-8"
+                else:
+                    resp.encoding = resp.apparent_encoding or "utf-8"
                 return _extract_text(resp.text, source_id)
             except requests.exceptions.Timeout:
                 if attempt < RETRY:
