@@ -172,6 +172,8 @@ _VI_POSITIVE: Dict[str, float] = {
 
     # Tăng trưởng mạnh
     "tăng mạnh": 0.8, "bứt phá": 0.75, "đột phá": 0.75, "bullish": 0.7,
+    "cú hích": 0.55, "phao cứu sinh": 0.45, "động lực tăng trưởng": 0.55,
+    "chuẩn mực mới": 0.40, "cú hích tăng trưởng": 0.60,
     "tăng đột biến": 0.75, "leo thang tích cực": 0.65,
 
     # Phục hồi / khởi sắc
@@ -185,7 +187,9 @@ _VI_POSITIVE: Dict[str, float] = {
     # Tăng trưởng / doanh thu / lợi nhuận
     "tăng trưởng mạnh": 0.7, "tăng trưởng": 0.35, "tăng trưởng tốt": 0.55,
     "lãi ròng tăng": 0.7, "doanh thu tăng": 0.65, "lợi nhuận tăng": 0.7,
-    "lợi nhuận cao kỷ lục": 0.85, "lãi": 0.30,
+    "lợi nhuận cao kỷ lục": 0.85,
+    "lãi tăng": 0.50, "lãi ròng tăng": 0.60, "lãi trước thuế tăng": 0.60,
+    "có lãi": 0.40, "ghi nhận lãi": 0.45,  # "lãi" standalone removed — too ambiguous
 
     # Cổ tức / chia thưởng
     "chia cổ tức": 0.25, "tăng cổ tức": 0.65, "thưởng cổ phiếu": 0.45,
@@ -410,6 +414,16 @@ _VI_NEGATIVE: Dict[str, float] = {
     "tín dụng xấu": 0.55, "nợ xấu tăng": 0.75, "nợ xấu tăng cao": 0.80, "nợ xấu": 0.50,
     "doanh thu giảm": 0.55, "lợi nhuận giảm": 0.60,
     "doanh thu sụt": 0.60, "lợi nhuận sụt": 0.65,
+    # Lãi + giảm — bắt "lãi giảm X%", "dự báo lãi giảm"
+    "lãi giảm": 0.60, "lãi trước thuế giảm": 0.65, "dự báo lãi giảm": 0.65,
+    "lợi nhuận trước thuế giảm": 0.65, "lãi ròng giảm": 0.65,
+    "dự báo lãi": 0.20,  # weak negative context — "dự báo lãi giảm" → 2 hits sum
+    # Phát hành thêm cổ phiếu = dilution → bearish signal
+    "phát hành thêm cổ phiếu": 0.35, "phát hành cổ phiếu": 0.25,
+    "muốn phát hành": 0.25, "kế hoạch phát hành": 0.20,
+    # Khối ngoại bán / đảo hàng
+    "khối ngoại đảo hàng": 0.50, "ngoại đảo hàng": 0.45,
+    "ngoại chuyển sang": 0.40, "bán ròng chuyển sang": 0.45,
     "bị phạt": 0.45, "xử phạt": 0.45, "truy thu": 0.40,
     "chậm tiến độ": 0.40, "dừng dự án": 0.55,
 
