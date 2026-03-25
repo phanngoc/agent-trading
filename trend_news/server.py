@@ -28,6 +28,13 @@ from datetime import datetime, timedelta
 from functools import lru_cache
 from typing import Dict, List, Optional, Tuple, Any
 
+# Load .env if python-dotenv available (graceful fallback)
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(__file__), ".env"), override=False)
+except ImportError:
+    pass
+
 import asyncio
 import json
 import uvicorn
@@ -107,13 +114,11 @@ def get_api_key(
     apikey: Optional[str] = Query(None),
 ) -> str:
     key = x_api_key or apikey or ""
-    # Dev mode: no keys configured → allow all
-    if "dev-key" in API_KEYS:
-        return key or "dev"
+    # Validate key — dev-key is a real key (useful for local dev/testing)
     if key not in API_KEYS:
         raise HTTPException(
             status_code=401,
-            detail={"code": "UNAUTHORIZED", "message": "Invalid or missing API key"},
+            detail={"code": "UNAUTHORIZED", "message": "Invalid or missing API key. Pass ?apikey= or X-API-Key header."},
         )
     if not _check_rate_limit(key):
         raise HTTPException(
