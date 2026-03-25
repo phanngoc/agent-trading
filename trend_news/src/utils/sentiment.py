@@ -978,12 +978,23 @@ class SentimentAnalyzer:
 
     def _route(self, text: str) -> float:
         if _is_vietnamese(text):
-            return _score_vietnamese(text[:512])
+            return self._score_vn(text[:512])
 
         if _is_chinese(text):
             return self._score_cn(text)
 
         return self._score_en(text)
+
+    # ── VN: PhoBERT neural primary, lexicon fallback ──────────────────────
+
+    def _score_vn(self, text: str) -> float:
+        """VN: PhoBERT neural primary → lexicon fallback."""
+        if _NEURAL_AVAILABLE and _neural_engine and _neural_engine.is_vn_available():
+            neural_score, _, neural_conf = _neural_engine.score_vn(text)
+            if neural_conf >= NEURAL_CONF_THRESHOLD:
+                return neural_score
+        # Fallback: lexicon
+        return _score_vietnamese(text, use_bert=False)
 
     # ── CN: LoRA neural primary, lexicon fallback ─────────────────────────
 

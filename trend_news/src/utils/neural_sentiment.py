@@ -1,11 +1,13 @@
 """
-Neural Sentiment Engine — M1-optimized BERT models for CN/EN financial text.
+Neural Sentiment Engine — M1-optimized BERT models for VN/CN/EN financial text.
 
 Architecture: Lazy-load, cached singleton, batched inference.
 
 Models used:
+  VN: mr4/phobert-base-vi-sentiment-analysis
+      PhoBERT fine-tuned, 3 labels (Tích cực/Tiêu cực/Trung tính)
   CN: IDEA-CCNL/Erlangshen-Roberta-110M-Sentiment
-      ~110M params, 16ms/sample on M1 CPU, 100% on CN financial test set
+      ~110M params, 16ms/sample on M1 CPU, binary pos/neg
   EN: ProsusAI/finbert
       ~110M params, 15ms/sample on M1 CPU, 88% on EN financial test set
 
@@ -36,6 +38,7 @@ import math
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
+VN_MODEL = "mr4/phobert-base-vi-sentiment-analysis"
 CN_MODEL = "IDEA-CCNL/Erlangshen-Roberta-110M-Sentiment"
 EN_MODEL  = "ProsusAI/finbert"
 
@@ -167,35 +170,30 @@ class _LoRAModelHolder(_ModelHolder):
 
 
 def _make_cn_model() -> _ModelHolder:
-    """Load CN model: LoRA adapter if available, else base model."""
-    from pathlib import Path
-    lora_path = Path("models/lora_cn/best")
-    if lora_path.exists():
-        holder = _LoRAModelHolder(
-            CN_MODEL,
-            str(lora_path),
-            label_map={
-                # LoRA trained: LABEL2ID={positive:0, negative:1, neutral:2}
-                "label_0": +1.0,   # positive
-                "label_1": -1.0,   # negative
-                "label_2":  0.0,   # neutral
-                # fallback for non-LoRA output
-                "positive": +1.0, "pos": +1.0,
-                "negative": -1.0, "neg": -1.0,
-            }
-        )
-        print(f"  [NeuralSentiment] CN: using LoRA adapter ({lora_path})")
-        return holder
+    """Load CN model: base pre-trained model (no LoRA required)."""
+    # IDEA-CCNL/Erlangshen-Roberta-110M-Sentiment outputs binary pos/neg
+    # label_0 = negative, label_1 = positive (empirically verified)
     return _ModelHolder(
         CN_MODEL,
         label_map={
-            "positive": +1.0, "pos": +1.0, "正": +1.0,
-            "negative": -1.0, "neg": -1.0, "负": -1.0,
-            "neutral":   0.0,
+            "label_0": -1.0,  # negative
+            "label_1": +1.0,  # positive
+            "positive": +1.0, "pos": +1.0, "正面": +1.0,
+            "negative": -1.0, "neg": -1.0, "负面": -1.0,
         }
     )
 
 _cn_model = _make_cn_model()
+
+# VN: PhoBERT pre-trained, 3 labels: Tích cực / Tiêu cực / Trung tính
+_vn_model = _ModelHolder(
+    VN_MODEL,
+    label_map={
+        "tích cực": +1.0, "positive": +1.0,
+        "tiêu cực": -1.0, "negative": -1.0,
+        "trung tính": 0.0, "neutral": 0.0,
+    }
+)
 
 _en_model = _ModelHolder(
     EN_MODEL,
@@ -250,6 +248,25 @@ class NeuralSentimentEngine:
     3. Batched: efficient inference for bulk scoring
     4. Fallback: returns (0.0, "Neutral", 0.0) if model unavailable
     """
+
+    def is_vn_available(self) -> bool:
+        return _vn_model.is_available()
+
+    def is_cn_available(self) -> bool:
+        return _cn_model.is_available()
+
+    def is_en_available(self) -> bool:
+        return _en_model.is_available()
+
+    def score_vn(self, text: str) -> Tuple[float, str, float]:
+        """Score Vietnamese text using PhoBERT. Returns (score, label, confidence)."""
+        cache_key = f"vn:{text[:100]}"
+        if cache_key in _SCORE_CACHE:
+            return _SCORE_CACHE[cache_key]
+        result = _vn_model.predict([text])[0]
+        if len(_SCORE_CACHE) < CACHE_MAX:
+            _SCORE_CACHE[cache_key] = result
+        return result
 
     def score_cn(self, text: str) -> Tuple[float, str, float]:
         """Score Chinese financial text. Returns (score, label, confidence)."""
