@@ -21,10 +21,11 @@ if args.date is None:
 
 # Create a custom config
 config = DEFAULT_CONFIG.copy()
-config["deep_think_llm"] = "gpt-5-mini"  # Use a different model
-config["quick_think_llm"] = "gpt-5-mini"  # Use a different model
-config["max_debate_rounds"] = 1  # Increase debate rounds
-config["max_recur_limit"] = 200  # Increase recursion limit for complex analyses
+config["llm_provider"]    = "anthropic"
+config["deep_think_llm"]  = "claude-3-haiku-20240307"
+config["quick_think_llm"] = "claude-3-haiku-20240307"
+config["max_debate_rounds"] = 1
+config["max_recur_limit"] = 200
 
 # Configure data vendors
 config["data_vendors"] = {
