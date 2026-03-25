@@ -592,6 +592,95 @@ class DatabaseManager:
         columns = [col[0] for col in cursor.description]
         return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
+    def search_news_fts(
+        self,
+        q: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        source_id: Optional[str] = None,
+        limit: int = 50,
+    ) -> List[Dict]:
+        """
+        Full-text search using FTS5 index on news_articles.title + content.
+        Falls back to LIKE search if FTS5 is unavailable.
+
+        Args:
+            q: Free-text query string (e.g. "cao su", "GVR lãi")
+        """
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+            params: List = []
+            where_parts: List[str] = ["news_fts MATCH ?"]
+
+            # Wrap multi-word queries in quotes for exact phrase search
+            # but also support unquoted for broader match
+            match_expr = f'"{q}"' if " " in q else q
+            params.append(match_expr)
+
+            if start_date:
+                if len(start_date) == 10:
+                    start_date += "T00:00:00"
+                where_parts.append("a.crawled_at >= ?")
+                params.append(start_date)
+            if end_date:
+                if len(end_date) == 10:
+                    end_date += "T23:59:59"
+                where_parts.append("a.crawled_at <= ?")
+                params.append(end_date)
+            if source_id:
+                where_parts.append("a.source_id = ?")
+                params.append(source_id)
+
+            params.append(limit)
+
+            query = f"""
+                SELECT a.source_id, a.title, a.url, a.mobile_url, a.ranks, a.crawled_at,
+                       a.sentiment_score, a.sentiment_label,
+                       CAST((-bm25(news_fts)) * 100 AS INTEGER) AS relevance_score
+                FROM news_fts
+                JOIN news_articles a ON news_fts.rowid = a.id
+                WHERE {" AND ".join(where_parts)}
+                ORDER BY relevance_score DESC, a.crawled_at DESC
+                LIMIT ?
+            """
+            try:
+                cursor.execute(query, tuple(params))
+                columns = [col[0] for col in cursor.description]
+                rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
+                # If exact phrase got 0 results, retry without quotes
+                if not rows and " " in q:
+                    params[0] = " AND ".join(f'"{word}"' if len(word) > 1 else word
+                                             for word in q.split())
+                    cursor.execute(query, tuple(params))
+                    columns = [col[0] for col in cursor.description]
+                    rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
+                return rows
+            except Exception:
+                # FTS fallback: LIKE search
+                like_q = f"%{q}%"
+                like_params: List = [like_q]
+                fb_where = ["title LIKE ?"]
+                if start_date:
+                    fb_where.append("crawled_at >= ?"); like_params.append(start_date)
+                if end_date:
+                    fb_where.append("crawled_at <= ?"); like_params.append(end_date)
+                if source_id:
+                    fb_where.append("source_id = ?"); like_params.append(source_id)
+                like_params.append(limit)
+                fallback_sql = f"""
+                    SELECT source_id, title, url, mobile_url, ranks, crawled_at,
+                           sentiment_score, sentiment_label, 1 AS relevance_score
+                    FROM news_articles
+                    WHERE {" AND ".join(fb_where)}
+                    ORDER BY crawled_at DESC LIMIT ?
+                """
+                cursor.execute(fallback_sql, tuple(like_params))
+                columns = [col[0] for col in cursor.description]
+                return [dict(zip(columns, row)) for row in cursor.fetchall()]
+        finally:
+            conn.close()
+
     def _plain_search(
         self,
         cursor,

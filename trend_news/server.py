@@ -369,6 +369,7 @@ def get_news_sentiment(
 
 @app.get("/api/v1/news", tags=["Native v1"])
 def get_news(
+    q: Optional[str] = Query(None, description="Full-text search query (e.g. 'cao su', 'GVR lãi')"),
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     source: Optional[str] = None,
@@ -376,7 +377,15 @@ def get_news(
     limit: int = Query(50, ge=1, le=500),
     api_key: str = Depends(get_api_key),
 ):
-    """Get news with optional filters. Returns enriched articles."""
+    """Get news with optional filters. Use ?q= for full-text search, ?tickers= for ticker-based search."""
+    if q:
+        return db_manager.search_news_fts(
+            q=q,
+            start_date=start_date,
+            end_date=end_date,
+            source_id=source,
+            limit=limit,
+        )
     return db_manager.get_filtered_news(
         start_date=start_date,
         end_date=end_date,
