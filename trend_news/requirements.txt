@@ -9,27 +9,10 @@ trafilatura>=1.12.0
 aiohttp>=3.9.0
 lxml>=4.9.0
 
-# Sentiment analysis
-vaderSentiment>=3.3.2
-underthesea>=6.8.4
-snownlp>=0.12.3
-
-# Streamlit UI
-streamlit>=1.30.0
-plotly>=5.18.0
-pandas>=2.1.0
-
-# LLM Sentiment Feedback Loop (LangChain)
-langchain-core>=0.3.0
-langchain-openai>=0.2.0
-# langchain-anthropic>=0.3.0   # alternative: uncomment if using Anthropic
-
-# Knowledge Graph & RAG
-cognee>=0.5.0
-kuzu>=0.8.0
-mem0ai>=0.1.0
-chainlit>=2.0.0
-langgraph>=0.2.0
+# FastAPI server
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.0.0
 
 # Testing
 pytest>=8.0.0

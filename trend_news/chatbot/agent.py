@@ -284,17 +284,16 @@ def sqlite_fallback(state: ChatbotState) -> ChatbotState:
 
 
 def rank_and_filter(state: ChatbotState) -> ChatbotState:
-    """Re-score with ViVADER, deduplicate, sort and limit results."""
-    from src.utils.vivader import ViVADERSentimentAnalyzer
+    """Re-score with lexicon, deduplicate, sort and limit results."""
+    from src.utils.sentiment import get_sentiment
 
-    vivader = ViVADERSentimentAnalyzer()
     results = list(state["raw_news_results"])
     prefs = state["user_preferences"]
 
     # Re-score articles that have no sentiment score
     for article in results:
         if article.get("sentiment_score") is None:
-            score = vivader.polarity_scores(article.get("title", "")).get("compound", 0.0)
+            score, _ = get_sentiment(article.get("title", ""))
             article["sentiment_score"] = score
             if score >= 0.35:
                 article["sentiment_label"] = "Bullish"

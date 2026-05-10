@@ -1,18 +1,10 @@
 """
-Sentiment analysis — Vietnamese (underthesea + lexicon) + Chinese (SnowNLP) + English (VADER).
+Lexicon-only sentiment fallback — VN/CN/EN financial.
 
-Vietnamese pipeline:
-  1. underthesea.sentiment() → "positive" | "negative"  (direction)
-  2. _lexicon_score()        → float in [-1.0, 1.0]     (direction + magnitude)
-  3. Combined float score in [-1.0, 1.0]
+Used only when the primary Claude scorer (src.core.claude_sentiment) is
+unavailable. Pure-Python, no ML dependencies.
 
-Chinese pipeline:
-  SnowNLP.sentiments → P(positive) ∈ [0,1] → mapped to [-1,1]
-
-Fallback chain: underthesea → lexicon-only → (0.0, "Neutral")
-English: VADER → (0.0, "Neutral")
-
-Public API (unchanged):
+Public API:
     get_sentiment(text: str) -> Tuple[float, str]
 """
 from __future__ import annotations
@@ -20,121 +12,6 @@ from __future__ import annotations
 import math
 import re
 from typing import Dict, List, Optional, Tuple
-
-# ---------------------------------------------------------------------------
-# VADER — English sentiment (optional)
-# ---------------------------------------------------------------------------
-try:
-    from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
-    _vader = SentimentIntensityAnalyzer()
-    _vader_available = True
-except ImportError:
-    _vader = None
-    _vader_available = False
-
-# ---------------------------------------------------------------------------
-# ViVADER — Vietnamese VADER-inspired analyzer (local, zero external deps)
-# ---------------------------------------------------------------------------
-try:
-    from src.utils.vivader import ViVADERSentimentAnalyzer
-    _vivader = ViVADERSentimentAnalyzer()
-    _vivader_available = True
-except ImportError:
-    try:
-        from .vivader import ViVADERSentimentAnalyzer
-        _vivader = ViVADERSentimentAnalyzer()
-        _vivader_available = True
-    except ImportError:
-        _vivader = None  # type: ignore[assignment]
-        _vivader_available = False
-
-# ---------------------------------------------------------------------------
-# SnowNLP — Chinese sentiment (optional)
-# ---------------------------------------------------------------------------
-try:
-    from snownlp import SnowNLP as _SnowNLP
-    _snownlp_available = True
-except ImportError:
-    _SnowNLP = None  # type: ignore[assignment, misc]
-    _snownlp_available = False
-
-# ---------------------------------------------------------------------------
-# underthesea — Vietnamese sentiment direction (optional)
-# ---------------------------------------------------------------------------
-try:
-    from underthesea import sentiment as _uts_sentiment
-    _uts_available = True
-except ImportError:
-    _uts_sentiment = None
-    _uts_available = False
-
-# ---------------------------------------------------------------------------
-# PhoBERT — Vietnamese financial BERT (lazy-loaded singleton)
-# Model: mr4/phobert-base-vi-sentiment-analysis
-# Labels: Tiêu cực (neg) / Tích cực (pos) / Trung tính (neutral)
-# Load time: ~1.5s (cached after first call). Inference: ~0.2s/batch.
-# Only invoked when lexicon signal is weak (|score| < BERT_INVOKE_THRESHOLD).
-# ---------------------------------------------------------------------------
-_phobert_pipe = None
-_phobert_available: bool = False
-_phobert_load_attempted: bool = False
-
-BERT_INVOKE_THRESHOLD = 0.20   # invoke BERT when lexicon |score| < this
-BERT_WEIGHT           = 0.60   # BERT weight in final blend (vs lexicon 0.40)
-_BERT_LABEL_MAP = {"Tích cực": 1.0, "Tiêu cực": -1.0, "Trung tính": 0.0}
-BERT_CONFIDENCE_THRESHOLD = 0.92  # only trust BERT when confidence is high
-
-# BERT is general VI model — only invoke when text has domain keywords
-# (prevents false positives on plain factual news like "công bố kết quả")
-_BERT_DOMAIN_RE = re.compile(
-    r'lỗ|lãi|tăng trần|giảm sàn|call margin|giải chấp|bán tháo|'
-    r'phá sản|vỡ nợ|kỷ lục|đột biến|sụt giảm|bứt phá|'
-    r'cổ tức|margin|thanh khoản|room ngoại|upcom|niêm yết',
-    re.IGNORECASE
-)
-
-
-def _load_phobert() -> bool:
-    """Lazy-load PhoBERT pipeline. Returns True if available."""
-    global _phobert_pipe, _phobert_available, _phobert_load_attempted
-    if _phobert_load_attempted:
-        return _phobert_available
-    _phobert_load_attempted = True
-    try:
-        from transformers import pipeline as hf_pipeline
-        _phobert_pipe = hf_pipeline(
-            "text-classification",
-            model="mr4/phobert-base-vi-sentiment-analysis",
-            device="cpu",
-            max_length=128,
-            truncation=True,
-        )
-        _phobert_available = True
-    except Exception:
-        _phobert_available = False
-    return _phobert_available
-
-
-def _score_phobert(text: str) -> float:
-    """Run PhoBERT on text. Returns score in [-1.0, 1.0] or 0.0 on error.
-
-    Only returns non-zero when confidence >= BERT_CONFIDENCE_THRESHOLD.
-    This prevents the model from overriding clear neutral cases with marginal signals.
-    """
-    if not _load_phobert() or _phobert_pipe is None:
-        return 0.0
-    try:
-        result = _phobert_pipe(text[:256])[0]
-        direction = _BERT_LABEL_MAP.get(result["label"], 0.0)
-        confidence = float(result["score"])
-        # Only emit signal when BERT is very confident
-        if confidence < BERT_CONFIDENCE_THRESHOLD:
-            return 0.0
-        # Scale: 0.85 conf → 0.35, 1.0 conf → 1.0
-        magnitude = (confidence - BERT_CONFIDENCE_THRESHOLD) / (1.0 - BERT_CONFIDENCE_THRESHOLD)
-        return direction * magnitude
-    except Exception:
-        return 0.0
 
 # ---------------------------------------------------------------------------
 # Vietnamese language detection — zero dependency, Unicode-based
@@ -637,71 +514,9 @@ def refresh_auto_learned_cache() -> None:
 #
 # Kết luận: Lexicon là nguồn chính. ViVADER chỉ bổ sung khi lexicon silent.
 # ---------------------------------------------------------------------------
-def _score_vietnamese(text: str, use_bert: bool = True) -> float:
-    """
-    Vietnamese financial sentiment scoring.
-
-    Pipeline (priority order):
-    1. Lexicon score     → domain-specific financial terms, negation, intensifiers
-    2. ViVADER score     → general Vietnamese sentiment (fallback only)
-    3. PhoBERT (BERT)    → deep-learning fallback when lexicon signal is weak
-
-    Logic:
-    - If |lexicon| >= BERT_INVOKE_THRESHOLD → lexicon is confident, blend with ViVADER
-    - If |lexicon| < BERT_INVOKE_THRESHOLD  → invoke PhoBERT, blend result with lexicon
-
-    Returns compound score in [-1.0, 1.0].
-    """
-    lexicon_score = _lexicon_score(text, _VI_POS_LEXICON, _VI_NEG_LEXICON)
-    vivader_score = _vivader.polarity_scores(text[:512])["compound"] if _vivader_available else 0.0
-
-    LEX_THRESHOLD = 0.05
-    VIV_THRESHOLD = 0.15
-    LEX_WEIGHT    = 0.85
-    VIV_WEIGHT    = 0.15
-
-    lex_strong = abs(lexicon_score) >= BERT_INVOKE_THRESHOLD  # confident lexicon signal
-    lex_has_signal = abs(lexicon_score) > LEX_THRESHOLD
-    viv_has_signal = abs(vivader_score) > VIV_THRESHOLD
-
-    # --- Lexicon is confident: standard blend (no BERT needed) ---
-    if lex_strong:
-        if viv_has_signal:
-            same_direction = (lexicon_score > 0) == (vivader_score > 0)
-            if same_direction:
-                return lexicon_score * LEX_WEIGHT + vivader_score * VIV_WEIGHT
-        return lexicon_score
-
-    # --- Lexicon weak: invoke PhoBERT (only for domain-relevant text) ---
-    # Strategy: BERT improves coverage but conflicts with inaccurate DB labels.
-    # Only use BERT for clearly negative signals — negative sentiment is universal
-    # across domains (lỗ, thanh lý, phá sản) regardless of training data.
-    # Positive BERT signals are less reliable (general model sees "vận hành" as positive
-    # but financial context may be neutral).
-    if use_bert and _BERT_DOMAIN_RE.search(text):
-        bert_score = _score_phobert(text)
-
-        # Trust BERT only for strong negative signals (both BERT negative AND strong conf)
-        if bert_score < -0.30:
-            if lex_has_signal and lexicon_score < 0:
-                # Both agree negative → blend
-                return bert_score * BERT_WEIGHT + lexicon_score * (1 - BERT_WEIGHT)
-            elif not lex_has_signal:
-                # Only BERT has strong negative signal
-                return bert_score
-
-    # --- Lexicon / ViVADER fallback ---
-    # --- No strong BERT: fallback to standard logic ---
-    if lex_has_signal and viv_has_signal:
-        same_direction = (lexicon_score > 0) == (vivader_score > 0)
-        if same_direction:
-            return lexicon_score * LEX_WEIGHT + vivader_score * VIV_WEIGHT
-        return lexicon_score
-    if lex_has_signal:
-        return lexicon_score
-    if viv_has_signal:
-        return vivader_score
-    return 0.0
+def _score_vietnamese(text: str, use_bert: bool = False) -> float:
+    """Vietnamese financial sentiment via domain lexicon."""
+    return _lexicon_score(text, _VI_POS_LEXICON, _VI_NEG_LEXICON)
 
 
 # ---------------------------------------------------------------------------
@@ -897,66 +712,18 @@ _EN_DOMAIN_RE = re.compile(
 )
 
 def _score_english_financial(text: str) -> float:
-    """English financial sentiment — lexicon + VADER blend.
-    Only activates for finance-domain text to avoid false positives
-    on tech/general EN articles (hackernews etc.)
-    """
-    # Domain gate: only score if text is finance-relevant
+    """English financial sentiment via domain lexicon (gated by finance keywords)."""
     if not _EN_DOMAIN_RE.search(text):
         return 0.0
-    lex = _lexicon_score(text.lower(), _EN_POS_LEX, _EN_NEG_LEX)
-    
-    if _vader_available and _vader:
-        vader_score = float(_vader.polarity_scores(text[:512])["compound"])
-        if abs(lex) >= 0.20:
-            # Financial lexicon strong — trust it, VADER often wrong on financial context
-            # e.g. "raises rates" looks positive to VADER ("raises" = good word)
-            if lex * vader_score > 0:
-                return lex * 0.85 + vader_score * 0.15  # same direction: small VADER boost
-            else:
-                return lex  # disagreement: trust domain lexicon
-        elif abs(lex) >= 0.05:
-            # Weak lexicon signal — 60/40 blend
-            return lex * 0.60 + vader_score * 0.40
-        elif abs(vader_score) >= 0.20:
-            # No lexicon signal, use VADER lightly
-            return vader_score * 0.40  # dampen general VADER
-    return lex
+    return _lexicon_score(text.lower(), _EN_POS_LEX, _EN_NEG_LEX)
 
 
 # ---------------------------------------------------------------------------
-# Neural sentiment engine — lazy-loaded BERT models (CN + EN financial)
-# ---------------------------------------------------------------------------
-try:
-    from src.utils.neural_sentiment import neural_engine as _neural_engine, _EN_FIN_RE
-    _NEURAL_AVAILABLE = True
-except ImportError:
-    _neural_engine = None  # type: ignore
-    _EN_FIN_RE = None      # type: ignore
-    _NEURAL_AVAILABLE = False
-
-# Lexicon-only threshold: if |lexicon| >= this, skip neural (already confident)
-LEXICON_CONFIDENT_THRESHOLD = 0.15  # Lexicon leads when |score| >= 0.15
-
-# Neural confidence threshold: below this, fall back to lexicon
-NEURAL_CONF_THRESHOLD = 0.65
-
-
-# ---------------------------------------------------------------------------
-# Singleton SentimentAnalyzer — public API: analyze(text) → (score, label)
+# Singleton SentimentAnalyzer — pure-lexicon routing
 # ---------------------------------------------------------------------------
 class SentimentAnalyzer:
-    """
-    Hybrid routing — priority per language:
+    """Lexicon-only sentiment fallback. VN/CN/EN domain dictionaries."""
 
-    VN  → lexicon only (100% domain accuracy, 10k/sec)
-    CN  → neural PRIMARY (LoRA-fine-tuned, 97.7% accuracy)
-           └─ fallback to lexicon if neural unavailable/low-conf
-    EN  → lexicon gate (financial domain check first)
-           └─ if financial domain: neural PRIMARY (FinBERT)
-           └─ fallback to lexicon
-    other → 0.0 neutral
-    """
     _instance = None
 
     def __new__(cls) -> "SentimentAnalyzer":
@@ -964,10 +731,7 @@ class SentimentAnalyzer:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    # ── Core routing ──────────────────────────────────────────────────────
-
     def analyze(self, text: str) -> Tuple[float, str]:
-        """Route text to correct scorer. Returns (score [-1,1], label)."""
         if not text:
             return 0.0, "Neutral"
         try:
@@ -978,71 +742,13 @@ class SentimentAnalyzer:
 
     def _route(self, text: str) -> float:
         if _is_vietnamese(text):
-            return self._score_vn(text[:512])
-
+            return _score_vietnamese(text[:512])
         if _is_chinese(text):
-            return self._score_cn(text)
-
-        return self._score_en(text)
-
-    # ── VN: PhoBERT neural primary, lexicon fallback ──────────────────────
-
-    def _score_vn(self, text: str) -> float:
-        """VN: PhoBERT neural primary → lexicon fallback."""
-        if _NEURAL_AVAILABLE and _neural_engine and _neural_engine.is_vn_available():
-            neural_score, _, neural_conf = _neural_engine.score_vn(text)
-            if neural_conf >= NEURAL_CONF_THRESHOLD:
-                return neural_score
-        # Fallback: lexicon
-        return _score_vietnamese(text, use_bert=False)
-
-    # ── CN: LoRA neural primary, lexicon fallback ─────────────────────────
-
-    def _score_cn(self, text: str) -> float:
-        """CN: neutral-override check → neural (LoRA) primary → lexicon fallback."""
-        # Hard neutral override: consolidation / wait-and-see patterns
-        for neutral_term in _ZH_NEUTRAL_OVERRIDE:
-            if neutral_term in text:
-                return 0.0
-
-        if _NEURAL_AVAILABLE and _neural_engine and _neural_engine.is_cn_available():
-            neural_score, _, neural_conf = _neural_engine.score_cn(text)
-            if neural_conf >= NEURAL_CONF_THRESHOLD:
-                return neural_score
-
-        # Fallback: lexicon (when neural unavailable or low confidence)
-        return _score_chinese_financial(text)
-
-    # ── EN: domain gate → neural primary, lexicon fallback ───────────────
-
-    def _score_en(self, text: str) -> float:
-        """EN: financial domain check → neural (FinBERT) primary → lexicon fallback."""
-        # Non-financial EN → always neutral (avoid false positives on HN/tech)
-        if _EN_FIN_RE and not _EN_FIN_RE.search(text):
-            return 0.0
-
-        # Financial domain confirmed — lexicon check first (fast path)
-        lex_score = _score_english_financial(text)
-
-        # If lexicon is already very confident, skip neural overhead
-        if abs(lex_score) >= LEXICON_CONFIDENT_THRESHOLD:
-            return lex_score
-
-        # Neural primary for ambiguous / weak lexicon signal
-        if _NEURAL_AVAILABLE and _neural_engine and _neural_engine.is_en_available():
-            neural_score, _, neural_conf = _neural_engine.score_en(text)
-            if neural_conf >= NEURAL_CONF_THRESHOLD:
-                if abs(lex_score) >= 0.15:
-                    # Lexicon has meaningful signal: 60/40 blend (lexicon leads)
-                    blended = lex_score * 0.60 + neural_score * 0.40
-                    # If lex and neural agree on direction, boost confidence
-                    if lex_score * neural_score > 0:
-                        return blended * 1.1
-                    # Disagree: trust lexicon (domain-specific)
-                    return lex_score
-                return neural_score  # No lexicon signal: trust FinBERT
-
-        return lex_score
+            for neutral_term in _ZH_NEUTRAL_OVERRIDE:
+                if neutral_term in text:
+                    return 0.0
+            return _score_chinese_financial(text)
+        return _score_english_financial(text)
 
 
 sentiment_analyzer = SentimentAnalyzer()

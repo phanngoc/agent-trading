@@ -26,7 +26,7 @@ import time
 import sqlite3
 from datetime import datetime, timedelta
 from functools import lru_cache
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Literal, Optional, Tuple, Any
 
 # Load .env if python-dotenv available (graceful fallback)
 try:
@@ -252,6 +252,35 @@ class SentimentFeedback(BaseModel):
     news_id: Optional[int] = None
     news_url: Optional[str] = None
     comment: Optional[str] = None
+
+
+class LLMSentimentArticle(BaseModel):
+    id: Optional[int] = None
+    title: str
+    content: str = ""
+    language: str = "vi"
+
+
+class LLMSentimentRequest(BaseModel):
+    articles: List[LLMSentimentArticle]
+    persist: bool = False
+
+
+class LLMSentimentResultItem(BaseModel):
+    article_id: Optional[int]
+    title: str
+    score: float
+    label: str
+    confidence: float
+    reasoning: str
+    source: str
+    model_used: str
+
+
+class LLMSentimentResponse(BaseModel):
+    results: List[LLMSentimentResultItem]
+    auth_kind: str
+    count: int
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -619,6 +648,65 @@ def get_threat_summary(
                 ],
             })
     return {"days_back": days_back, "summary": results}
+
+
+# ── LLM sentiment (Claude) ────────────────────────────────────────────────────
+
+@app.post(
+    "/api/v1/llm/sentiment",
+    response_model=LLMSentimentResponse,
+    tags=["LLM Sentiment"],
+)
+def llm_sentiment(
+    body: LLMSentimentRequest,
+    api_key: str = Depends(get_api_key),
+):
+    """Score a list of articles via Claude using prompt batching.
+
+    Articles are chunked (5/call) and fired in parallel against Claude
+    /v1/messages. Falls back to lexicon scoring on any Claude failure.
+    """
+    if not body.articles:
+        raise HTTPException(status_code=400, detail="articles must not be empty")
+
+    try:
+        from src.core.claude_client import ClaudeAuthError
+        from src.core.claude_sentiment import ClaudeSentiment, SentimentItem
+    except ImportError as e:
+        raise HTTPException(status_code=500, detail=f"claude module unavailable: {e}")
+
+    items = [
+        SentimentItem(
+            article_id=a.id,
+            title=a.title,
+            content=a.content,
+            language=a.language,
+        )
+        for a in body.articles
+    ]
+    try:
+        scorer = ClaudeSentiment(db_path=DB_PATH if body.persist else None)
+        results = scorer.score(items)
+    except ClaudeAuthError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+    return LLMSentimentResponse(
+        results=[
+            LLMSentimentResultItem(
+                article_id=r.article_id,
+                title=r.title,
+                score=r.score,
+                label=r.label,
+                confidence=r.confidence,
+                reasoning=r.reasoning,
+                source=r.source,
+                model_used=r.model_used,
+            )
+            for r in results
+        ],
+        auth_kind=scorer.client.auth_kind,
+        count=len(results),
+    )
 
 
 # ── Sentiment learning ────────────────────────────────────────────────────────
