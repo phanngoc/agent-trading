@@ -84,13 +84,24 @@ db_manager = DatabaseManager(DB_PATH)
 from src.core.signal_broadcaster import manager as ws_manager, SignalWatcher
 _signal_watcher = SignalWatcher(DB_PATH)
 
+# In-process crawl + sentiment scheduler
+from src.core.scheduler import TrendRadarScheduler
+_scheduler = TrendRadarScheduler(DB_PATH)
+
+# Toggle: set TRENDRADAR_SCHEDULER=0 to disable in-process jobs (useful
+# for read-only API replicas or when running pipeline.py externally).
+_SCHEDULER_ENABLED = os.environ.get("TRENDRADAR_SCHEDULER", "1") != "0"
+
 from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def _lifespan(app):
     asyncio.create_task(_signal_watcher.run())
+    if _SCHEDULER_ENABLED:
+        _scheduler.start()
     yield
     _signal_watcher.stop()
+    _scheduler.shutdown()
 
 # attach lifespan after defining it
 app.router.lifespan_context = _lifespan
@@ -707,6 +718,25 @@ def llm_sentiment(
         auth_kind=scorer.client.auth_kind,
         count=len(results),
     )
+
+
+# ── Scheduler ─────────────────────────────────────────────────────────────────
+
+@app.get("/api/v1/scheduler/status", tags=["Scheduler"])
+def scheduler_status(api_key: str = Depends(get_api_key)):
+    """Inspect the in-process crawl + LLM-eval scheduler state."""
+    return _scheduler.snapshot()
+
+
+@app.post("/api/v1/scheduler/trigger/{job_name}", tags=["Scheduler"])
+async def scheduler_trigger(job_name: str, api_key: str = Depends(get_api_key)):
+    """Manually fire a job ad-hoc (returns immediately; check status for result)."""
+    if not _SCHEDULER_ENABLED:
+        raise HTTPException(status_code=409, detail="scheduler is disabled")
+    try:
+        return await _scheduler.trigger(job_name)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"unknown job: {job_name}")
 
 
 # ── Sentiment learning ────────────────────────────────────────────────────────
