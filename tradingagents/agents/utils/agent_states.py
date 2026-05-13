@@ -53,6 +53,10 @@ class AgentState(MessagesState):
 
     sender: Annotated[str, "Agent that sent this message"]
 
+    # Optional prior-run context (Phase 6: outcome resolution feeds prior
+    # reflections back into the next analysis run for the same ticker).
+    past_context: Annotated[str, "Summary of prior-run context, if any"]
+
     # research step
     market_report: Annotated[str, "Report from the Market Analyst"]
     sentiment_report: Annotated[str, "Report from the Social Media Analyst"]
