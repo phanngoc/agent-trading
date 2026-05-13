@@ -97,6 +97,59 @@ def test_phase1_llm_client_helpers():
     assert ("Claude Opus 4.7 - Latest frontier, long-running agents and coding", "claude-opus-4-7") in get_model_options("anthropic", "deep")
 
 
+def test_phase2_ollama_client_no_key_required():
+    """Ollama uses local endpoint; no API key required."""
+    from tradingagents.llm_clients import create_llm_client
+
+    client = create_llm_client(provider="ollama", model="qwen3:latest")
+    llm = client.get_llm()
+    assert llm.openai_api_base.startswith("http://")
+
+
+def test_phase2_openrouter_client_needs_key():
+    """OpenRouter raises when key is missing, succeeds when set."""
+    import os
+    from tradingagents.llm_clients import create_llm_client
+
+    saved = os.environ.pop("OPENROUTER_API_KEY", None)
+    try:
+        client = create_llm_client(provider="openrouter", model="some/model")
+        try:
+            client.get_llm()
+            assert False, "should have raised for missing OPENROUTER_API_KEY"
+        except ValueError as exc:
+            assert "OPENROUTER_API_KEY" in str(exc)
+
+        os.environ["OPENROUTER_API_KEY"] = "sk-or-test"
+        llm = create_llm_client(provider="openrouter", model="some/model").get_llm()
+        assert "openrouter.ai" in llm.openai_api_base
+    finally:
+        os.environ.pop("OPENROUTER_API_KEY", None)
+        if saved:
+            os.environ["OPENROUTER_API_KEY"] = saved
+
+
+def test_phase2_ollama_base_url_env_override():
+    import os
+    from tradingagents.llm_clients import create_llm_client
+
+    os.environ["OLLAMA_BASE_URL"] = "http://remote-ollama:11434/v1"
+    try:
+        llm = create_llm_client(provider="ollama", model="qwen3:latest").get_llm()
+        assert "remote-ollama" in llm.openai_api_base
+    finally:
+        del os.environ["OLLAMA_BASE_URL"]
+
+
+def test_phase2_factory_supports_extra_providers():
+    """factory.py dispatches all upstream-supported providers."""
+    from tradingagents.llm_clients.factory import _OPENAI_COMPATIBLE
+
+    assert "ollama" in _OPENAI_COMPATIBLE
+    assert "openrouter" in _OPENAI_COMPATIBLE
+    assert "xai" in _OPENAI_COMPATIBLE
+
+
 def test_phase1_env_overlay():
     import importlib
     import os
