@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tradingagents"
-version = "0.2.0"
-description = "TradingAgents: Multi-Agents LLM Financial Trading Framework"
+version = "0.2.5+local.1"
+description = "TradingAgents: Multi-Agents LLM Financial Trading Framework (Vietnamese market fork)"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -17,6 +17,7 @@ dependencies = [
     "langchain-google-genai>=2.1.5",
     "langchain-openai>=0.3.23",
     "langgraph>=0.4.8",
+    "langgraph-checkpoint-sqlite>=2.0.0",
     "pandas>=2.3.0",
     "parsel>=1.10.0",
     "pytz>=2025.2",
