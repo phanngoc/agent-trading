@@ -1,7 +1,36 @@
 # TradingAgents/graph/reflection.py
 
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from langchain_openai import ChatOpenAI
+
+
+def resolve_benchmark(ticker: str, config: Optional[Dict[str, Any]] = None) -> str:
+    """Resolve the alpha-benchmark ticker for ``ticker`` using config.
+
+    Precedence:
+      1. ``benchmark_ticker`` (when set in config) wins for all tickers.
+      2. Match ``ticker`` against ``benchmark_map`` keys by exchange suffix:
+         e.g. ``VIC.VN`` → ``.VN`` → ``^VNINDEX``.
+      3. Fall back to the empty-suffix entry (``"SPY"`` for US tickers).
+      4. If config is not provided or has no map, return ``"SPY"`` so the
+         reflection label keeps reading "Alpha vs SPY" for US callers.
+    """
+    if config is None:
+        from tradingagents.dataflows.config import get_config
+        config = get_config()
+
+    explicit = config.get("benchmark_ticker")
+    if explicit:
+        return explicit
+
+    benchmark_map = config.get("benchmark_map") or {}
+    if not benchmark_map:
+        return "SPY"
+
+    for suffix, bench in benchmark_map.items():
+        if suffix and ticker.endswith(suffix):
+            return bench
+    return benchmark_map.get("", "SPY")
 
 
 class Reflector:

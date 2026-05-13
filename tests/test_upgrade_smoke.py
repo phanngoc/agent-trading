@@ -174,6 +174,28 @@ def test_phase3_graph_with_sentiment_analyst():
     assert ta.graph is not None
 
 
+def test_phase7_benchmark_resolver():
+    from tradingagents.graph.reflection import resolve_benchmark
+    from tradingagents.default_config import DEFAULT_CONFIG
+
+    cfg = DEFAULT_CONFIG.copy()
+    assert resolve_benchmark("NVDA", cfg) == "SPY"
+    assert resolve_benchmark("VIC.VN", cfg) == "^VNINDEX"
+    assert resolve_benchmark("7203.T", cfg) == "^N225"
+    assert resolve_benchmark("HSBA.L", cfg) == "^FTSE"
+
+    cfg["benchmark_ticker"] = "QQQ"
+    assert resolve_benchmark("VIC.VN", cfg) == "QQQ", "explicit benchmark_ticker overrides map"
+
+
+def test_phase7_global_news_tool_optional_args():
+    from tradingagents.agents.utils.news_data_tools import get_global_news
+
+    sig_params = get_global_news.args_schema.model_fields
+    assert sig_params["look_back_days"].default is None
+    assert sig_params["limit"].default is None
+
+
 def test_phase1_env_overlay():
     import importlib
     import os
