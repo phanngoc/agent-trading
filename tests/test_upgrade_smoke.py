@@ -264,6 +264,33 @@ def test_phase6_safe_ticker_component_rejects_path_traversal():
             pass
 
 
+def test_oauth_anthropic_via_env_token(monkeypatch):
+    """Setting ANTHROPIC_AUTH_TOKEN routes Anthropic via OAuth Bearer."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "sk-ant-oat-fake-test-token")
+    monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
+
+    from tradingagents.llm_clients import create_llm_client
+
+    client = create_llm_client(provider="anthropic", model="claude-haiku-4-5")
+    llm = client.get_llm()
+    # Verify the underlying SDK client picked up the bearer token, not API key.
+    assert getattr(llm._client, "auth_token", "").startswith("sk-ant-oat")
+    assert not (getattr(llm._client, "api_key", "") or "").strip()
+
+
+def test_oauth_anthropic_via_claude_code_token(monkeypatch):
+    """CLAUDE_CODE_OAUTH_TOKEN starting with sk-ant-oat routes via OAuth."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat-cc-fake-test")
+
+    from tradingagents.llm_clients import create_llm_client
+
+    llm = create_llm_client(provider="anthropic", model="claude-haiku-4-5").get_llm()
+    assert "oauth-2025-04-20" in (llm.betas or [])
+
+
 def test_phase1_env_overlay():
     import importlib
     import os
