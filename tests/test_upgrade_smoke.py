@@ -150,6 +150,30 @@ def test_phase2_factory_supports_extra_providers():
     assert "xai" in _OPENAI_COMPATIBLE
 
 
+def test_phase3_sentiment_analyst_importable():
+    from tradingagents.agents import create_sentiment_analyst  # noqa: F401
+    from tradingagents.dataflows.reddit import fetch_reddit_posts  # noqa: F401
+    from tradingagents.dataflows.stocktwits import fetch_stocktwits_messages  # noqa: F401
+
+
+def test_phase3_graph_with_sentiment_analyst():
+    """Verify the graph compiles with 'sentiment' in selected_analysts."""
+    from tradingagents.graph.trading_graph import TradingAgentsGraph
+    from tradingagents.default_config import DEFAULT_CONFIG
+
+    config = DEFAULT_CONFIG.copy()
+    config["llm_provider"] = "anthropic"
+    config["deep_think_llm"] = "claude-3-haiku-20240307"
+    config["quick_think_llm"] = "claude-3-haiku-20240307"
+
+    ta = TradingAgentsGraph(
+        selected_analysts=["market", "sentiment", "news", "fundamentals"],
+        debug=False,
+        config=config,
+    )
+    assert ta.graph is not None
+
+
 def test_phase1_env_overlay():
     import importlib
     import os

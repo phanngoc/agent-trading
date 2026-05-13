@@ -61,6 +61,15 @@ class GraphSetup:
         if "social" in selected_analysts:
             analyst_nodes["social"] = create_social_media_analyst(self.quick_thinking_llm)
 
+        if "sentiment" in selected_analysts:
+            # Upstream v0.2.5's sentiment analyst — pre-fetches StockTwits +
+            # Reddit + news and analyzes in a single LLM call. Writes to the
+            # same sentiment_report state field as "social", so they are
+            # mutually exclusive analyst selections, not additive. Use
+            # "sentiment" for US tickers (StockTwits/Reddit coverage); use
+            # "social" for VN tickers (yfinance-news only via trend_news).
+            analyst_nodes["sentiment"] = create_sentiment_analyst(self.quick_thinking_llm)
+
         if "news" in selected_analysts:
             analyst_nodes["news"] = create_news_analyst(self.quick_thinking_llm)
 
