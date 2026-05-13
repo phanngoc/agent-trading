@@ -16,13 +16,20 @@ class Propagator:
         self.max_recur_limit = max_recur_limit
 
     def create_initial_state(
-        self, company_name: str, trade_date: str
+        self, company_name: str, trade_date: str, past_context: str = ""
     ) -> Dict[str, Any]:
-        """Create the initial state for the agent graph."""
+        """Create the initial state for the agent graph.
+
+        ``past_context`` (optional) seeds the agent state with prior-run
+        context, e.g. a summary of recent decisions for the same ticker.
+        Used by Phase 6's outcome resolution to thread historical
+        reflections into the next run.
+        """
         return {
             "messages": [("human", company_name)],
             "company_of_interest": company_name,
             "trade_date": str(trade_date),
+            "past_context": past_context,
             "investment_debate_state": InvestDebateState(
                 {
                     "bull_history": "",

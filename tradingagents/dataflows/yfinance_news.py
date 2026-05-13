@@ -104,22 +104,32 @@ def get_news_yfinance(
 
 def get_global_news_yfinance(
     curr_date: str,
-    look_back_days: int = 7,
-    limit: int = 10,
+    look_back_days=None,
+    limit=None,
 ) -> str:
     """
     Retrieve global/macro economic news using yfinance Search.
 
     Args:
         curr_date: Current date in yyyy-mm-dd format
-        look_back_days: Number of days to look back
-        limit: Maximum number of articles to return
+        look_back_days: Number of days to look back. ``None`` falls back to
+            ``global_news_lookback_days`` from the active config.
+        limit: Maximum number of articles to return. ``None`` falls back to
+            ``global_news_article_limit`` from the active config.
 
     Returns:
         Formatted string containing global news articles
     """
-    # Search queries for macro/global news
-    search_queries = [
+    from tradingagents.dataflows.config import get_config
+
+    config = get_config()
+    if look_back_days is None:
+        look_back_days = config.get("global_news_lookback_days", 7)
+    if limit is None:
+        limit = config.get("global_news_article_limit", 10)
+    # Search queries: configurable via global_news_queries; fall back to a
+    # macro-only baseline so older configs keep working.
+    search_queries = config.get("global_news_queries") or [
         "stock market economy",
         "Federal Reserve interest rates",
         "inflation economic outlook",

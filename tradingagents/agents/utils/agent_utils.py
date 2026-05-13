@@ -19,6 +19,35 @@ from tradingagents.agents.utils.news_data_tools import (
     get_global_news
 )
 
+
+def get_language_instruction() -> str:
+    """Return a prompt instruction for the configured output language.
+
+    Returns empty string when English (default), so no extra tokens are used.
+    Applied to every agent whose output reaches the saved report — analysts,
+    researchers, debaters, research manager, trader — so a non-English run
+    produces a fully localized report rather than a mix of languages.
+    """
+    from tradingagents.dataflows.config import get_config
+    lang = get_config().get("output_language", "English")
+    if lang.strip().lower() == "english":
+        return ""
+    return f" Write your entire response in {lang}."
+
+
+def build_instrument_context(ticker: str) -> str:
+    """Describe the exact instrument so agents preserve exchange-qualified tickers.
+
+    Critical for VN (.VN), HK (.HK), London (.L) etc. tickers — agents must
+    not drop the suffix in tool calls or reports.
+    """
+    return (
+        f"The instrument to analyze is `{ticker}`. "
+        "Use this exact ticker in every tool call, report, and recommendation, "
+        "preserving any exchange suffix (e.g. `.VN`, `.TO`, `.L`, `.HK`, `.T`)."
+    )
+
+
 def create_msg_delete():
     def delete_messages(state):
         """Clear messages and add placeholder for Anthropic compatibility"""

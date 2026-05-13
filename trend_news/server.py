@@ -26,7 +26,14 @@ import time
 import sqlite3
 from datetime import datetime, timedelta
 from functools import lru_cache
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Literal, Optional, Tuple, Any
+
+# Load .env if python-dotenv available (graceful fallback)
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(__file__), ".env"), override=False)
+except ImportError:
+    pass
 
 import asyncio
 import json
@@ -77,13 +84,24 @@ db_manager = DatabaseManager(DB_PATH)
 from src.core.signal_broadcaster import manager as ws_manager, SignalWatcher
 _signal_watcher = SignalWatcher(DB_PATH)
 
+# In-process crawl + sentiment scheduler
+from src.core.scheduler import TrendRadarScheduler
+_scheduler = TrendRadarScheduler(DB_PATH)
+
+# Toggle: set TRENDRADAR_SCHEDULER=0 to disable in-process jobs (useful
+# for read-only API replicas or when running pipeline.py externally).
+_SCHEDULER_ENABLED = os.environ.get("TRENDRADAR_SCHEDULER", "1") != "0"
+
 from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def _lifespan(app):
     asyncio.create_task(_signal_watcher.run())
+    if _SCHEDULER_ENABLED:
+        _scheduler.start()
     yield
     _signal_watcher.stop()
+    _scheduler.shutdown()
 
 # attach lifespan after defining it
 app.router.lifespan_context = _lifespan
@@ -107,13 +125,11 @@ def get_api_key(
     apikey: Optional[str] = Query(None),
 ) -> str:
     key = x_api_key or apikey or ""
-    # Dev mode: no keys configured → allow all
-    if "dev-key" in API_KEYS:
-        return key or "dev"
+    # Validate key — dev-key is a real key (useful for local dev/testing)
     if key not in API_KEYS:
         raise HTTPException(
             status_code=401,
-            detail={"code": "UNAUTHORIZED", "message": "Invalid or missing API key"},
+            detail={"code": "UNAUTHORIZED", "message": "Invalid or missing API key. Pass ?apikey= or X-API-Key header."},
         )
     if not _check_rate_limit(key):
         raise HTTPException(
@@ -249,6 +265,35 @@ class SentimentFeedback(BaseModel):
     comment: Optional[str] = None
 
 
+class LLMSentimentArticle(BaseModel):
+    id: Optional[int] = None
+    title: str
+    content: str = ""
+    language: str = "vi"
+
+
+class LLMSentimentRequest(BaseModel):
+    articles: List[LLMSentimentArticle]
+    persist: bool = False
+
+
+class LLMSentimentResultItem(BaseModel):
+    article_id: Optional[int]
+    title: str
+    score: float
+    label: str
+    confidence: float
+    reasoning: str
+    source: str
+    model_used: str
+
+
+class LLMSentimentResponse(BaseModel):
+    results: List[LLMSentimentResultItem]
+    auth_kind: str
+    count: int
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @app.get("/", include_in_schema=False)
@@ -369,6 +414,7 @@ def get_news_sentiment(
 
 @app.get("/api/v1/news", tags=["Native v1"])
 def get_news(
+    q: Optional[str] = Query(None, description="Full-text search query (e.g. 'cao su', 'GVR lãi')"),
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     source: Optional[str] = None,
@@ -376,7 +422,15 @@ def get_news(
     limit: int = Query(50, ge=1, le=500),
     api_key: str = Depends(get_api_key),
 ):
-    """Get news with optional filters. Returns enriched articles."""
+    """Get news with optional filters. Use ?q= for full-text search, ?tickers= for ticker-based search."""
+    if q:
+        return db_manager.search_news_fts(
+            q=q,
+            start_date=start_date,
+            end_date=end_date,
+            source_id=source,
+            limit=limit,
+        )
     return db_manager.get_filtered_news(
         start_date=start_date,
         end_date=end_date,
@@ -605,6 +659,84 @@ def get_threat_summary(
                 ],
             })
     return {"days_back": days_back, "summary": results}
+
+
+# ── LLM sentiment (Claude) ────────────────────────────────────────────────────
+
+@app.post(
+    "/api/v1/llm/sentiment",
+    response_model=LLMSentimentResponse,
+    tags=["LLM Sentiment"],
+)
+def llm_sentiment(
+    body: LLMSentimentRequest,
+    api_key: str = Depends(get_api_key),
+):
+    """Score a list of articles via Claude using prompt batching.
+
+    Articles are chunked (5/call) and fired in parallel against Claude
+    /v1/messages. Falls back to lexicon scoring on any Claude failure.
+    """
+    if not body.articles:
+        raise HTTPException(status_code=400, detail="articles must not be empty")
+
+    try:
+        from src.core.claude_client import ClaudeAuthError
+        from src.core.claude_sentiment import ClaudeSentiment, SentimentItem
+    except ImportError as e:
+        raise HTTPException(status_code=500, detail=f"claude module unavailable: {e}")
+
+    items = [
+        SentimentItem(
+            article_id=a.id,
+            title=a.title,
+            content=a.content,
+            language=a.language,
+        )
+        for a in body.articles
+    ]
+    try:
+        scorer = ClaudeSentiment(db_path=DB_PATH if body.persist else None)
+        results = scorer.score(items)
+    except ClaudeAuthError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+    return LLMSentimentResponse(
+        results=[
+            LLMSentimentResultItem(
+                article_id=r.article_id,
+                title=r.title,
+                score=r.score,
+                label=r.label,
+                confidence=r.confidence,
+                reasoning=r.reasoning,
+                source=r.source,
+                model_used=r.model_used,
+            )
+            for r in results
+        ],
+        auth_kind=scorer.client.auth_kind,
+        count=len(results),
+    )
+
+
+# ── Scheduler ─────────────────────────────────────────────────────────────────
+
+@app.get("/api/v1/scheduler/status", tags=["Scheduler"])
+def scheduler_status(api_key: str = Depends(get_api_key)):
+    """Inspect the in-process crawl + LLM-eval scheduler state."""
+    return _scheduler.snapshot()
+
+
+@app.post("/api/v1/scheduler/trigger/{job_name}", tags=["Scheduler"])
+async def scheduler_trigger(job_name: str, api_key: str = Depends(get_api_key)):
+    """Manually fire a job ad-hoc (returns immediately; check status for result)."""
+    if not _SCHEDULER_ENABLED:
+        raise HTTPException(status_code=409, detail="scheduler is disabled")
+    try:
+        return await _scheduler.trigger(job_name)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"unknown job: {job_name}")
 
 
 # ── Sentiment learning ────────────────────────────────────────────────────────

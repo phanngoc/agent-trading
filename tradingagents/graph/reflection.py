@@ -1,7 +1,48 @@
 # TradingAgents/graph/reflection.py
 
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from langchain_openai import ChatOpenAI
+
+
+def resolve_benchmark(ticker: str, config: Optional[Dict[str, Any]] = None) -> str:
+    """Resolve the alpha-benchmark ticker for ``ticker`` using config.
+
+    Precedence:
+      1. ``benchmark_ticker`` (when set in config) wins for all tickers.
+      2. Match ``ticker`` against ``benchmark_map`` keys by exchange suffix:
+         e.g. ``VIC.VN`` → ``.VN`` → ``^VNINDEX``.
+      3. Fall back to the empty-suffix entry (``"SPY"`` for US tickers).
+      4. If config is not provided or has no map, return ``"SPY"`` so the
+         reflection label keeps reading "Alpha vs SPY" for US callers.
+    """
+    if config is None:
+        from tradingagents.dataflows.config import get_config
+        config = get_config()
+
+    explicit = config.get("benchmark_ticker")
+    if explicit:
+        return explicit
+
+    benchmark_map = config.get("benchmark_map") or {}
+    if not benchmark_map:
+        return "SPY"
+
+    for suffix, bench in benchmark_map.items():
+        if suffix and ticker.endswith(suffix):
+            return bench
+    return benchmark_map.get("", "SPY")
+
+
+_LOG_REFLECTION_PROMPT = (
+    "You are a trading analyst reviewing your own past decision now that the outcome is known.\n"
+    "Write exactly 2-4 sentences of plain prose (no bullets, no headers, no markdown).\n\n"
+    "Cover in order:\n"
+    "1. Was the directional call correct? (cite the alpha figure)\n"
+    "2. Which part of the investment thesis held or failed?\n"
+    "3. One concrete lesson to apply to the next similar analysis.\n\n"
+    "Be specific and terse. Your output will be stored verbatim in a decision log "
+    "and re-read by future analysts, so every word must earn its place."
+)
 
 
 class Reflector:
@@ -11,6 +52,34 @@ class Reflector:
         """Initialize the reflector with an LLM."""
         self.quick_thinking_llm = quick_thinking_llm
         self.reflection_system_prompt = self._get_reflection_prompt()
+
+    def reflect_on_final_decision(
+        self,
+        final_decision: str,
+        raw_return: float,
+        alpha_return: float,
+        benchmark_name: str = "SPY",
+    ) -> str:
+        """Single terse reflection on the final trade decision with outcome context.
+
+        Used by the outcome-resolution path (TradingMemoryLog.update_with_outcome).
+        Produces 2-4 sentences of plain prose so the reflection re-injects
+        cleanly into future agent prompts without bloating the context window.
+        ``benchmark_name`` is the label for the alpha line (e.g. "SPY",
+        "^VNINDEX", "^N225").
+        """
+        messages = [
+            ("system", _LOG_REFLECTION_PROMPT),
+            (
+                "human",
+                (
+                    f"Raw return: {raw_return:+.1%}\n"
+                    f"Alpha vs {benchmark_name}: {alpha_return:+.1%}\n\n"
+                    f"Final Decision:\n{final_decision}"
+                ),
+            ),
+        ]
+        return self.quick_thinking_llm.invoke(messages).content
 
     def _get_reflection_prompt(self) -> str:
         """Get the system prompt for reflection."""

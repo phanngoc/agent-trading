@@ -21,8 +21,7 @@ Other options:
     --mode STR          Report mode passed to main.py (default: daily)
     --db-path STR       Path to SQLite DB (default: output/trend_news.db)
     --days-back INT     Days back for LLM evaluation (default: 7)
-    --llm-provider STR  openai|anthropic (default: openai)
-    --llm-model STR     Override LLM model name
+    --llm-model STR     Override Claude model (default: claude-haiku-4-5)
     --dry-run           Pass --dry-run to Batches 2 and 3 (no DB writes)
 """
 import argparse
@@ -71,17 +70,15 @@ def main() -> int:
     parser.add_argument("--db-path",      type=str, default=_DEFAULT_DB)
     parser.add_argument("--days-back",    type=int, default=7,
                         help="Days back for LLM evaluation (default: 7)")
-    parser.add_argument("--llm-provider", type=str, default="auto",
-                        choices=["openai", "anthropic", "groq", "auto"],
-                        help="LLM provider for Batch 2. 'auto' tries groq→openai→anthropic")
-    parser.add_argument("--llm-model",    type=str, default=None)
+    parser.add_argument("--llm-model",    type=str, default=None,
+                        help="Override Claude model (default: claude-haiku-4-5)")
     parser.add_argument("--dry-run",      action="store_true",
                         help="Pass --dry-run to Batches 2 and 3")
     args = parser.parse_args()
 
     print("[Pipeline] TrendRadar Sentiment Pipeline starting...")
     print(f"  Fetch:    {'skip' if args.skip_fetch else 'enabled'}")
-    print(f"  LLM:      {'skip' if args.skip_llm else f'enabled ({args.llm_provider})'}")
+    print(f"  LLM:      {'skip' if args.skip_llm else 'enabled (claude)'}")
     print(f"  Score:    {'skip' if args.skip_score else 'enabled'}")
     print(f"  Dry run:  {args.dry_run}")
 
@@ -106,7 +103,6 @@ def main() -> int:
         cmd = [
             _PYTHON, os.path.join(_HERE, "batch_llm_eval.py"),
             "--days-back", str(args.days_back),
-            "--provider",  args.llm_provider,
             "--db-path",   args.db_path,
         ]
         if args.llm_model:

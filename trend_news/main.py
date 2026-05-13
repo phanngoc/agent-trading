@@ -45,6 +45,22 @@ except ImportError:
     VIETNAM_SCRAPER_AVAILABLE = False
     print("⚠ VietnamDataFetcher không khả dụng (bỏ qua scraper sources). Chạy: pip install beautifulsoup4 lxml")
 
+# Import async concurrent fetcher
+try:
+    from src.core.async_fetcher import crawl_all_sync
+    ASYNC_CRAWLER_AVAILABLE = True
+except ImportError as _ac_err:
+    ASYNC_CRAWLER_AVAILABLE = False
+    print(f"⚠ AsyncCrawler không khả dụng (fallback to sequential): {_ac_err}")
+
+# Import service manager for external processes (rod_service, cdp_service, etc.)
+try:
+    from src.core.service_manager import ServiceManager
+    SERVICE_MANAGER_AVAILABLE = True
+except ImportError as _sm_err:
+    SERVICE_MANAGER_AVAILABLE = False
+    print(f"⚠ ServiceManager không khả dụng: {_sm_err}")
+
 # Import WorldMonitor enrichment pipeline
 try:
     from src.scrapers.worldmonitor_fetcher import WorldMonitorFetcher
@@ -126,6 +142,11 @@ class NewsAnalyzer:
             groq_key = os.environ.get("GROQ_API_KEY", "")
             self.wm_summarizer = GroqSummarizer(api_key=groq_key) if groq_key else None
             print(f"🌍 WorldMonitor pipeline: enabled | Groq: {'enabled' if groq_key else 'disabled (no GROQ_API_KEY)'}")
+
+        # Initialize service manager for external processes (rod_service, etc.)
+        self.service_manager = None
+        if SERVICE_MANAGER_AVAILABLE:
+            self.service_manager = ServiceManager()
 
         if self.is_github_actions:
             self._check_version_update()
@@ -332,49 +353,69 @@ class NewsAnalyzer:
         print(f"báo cáoChế độ: {self.report_mode}")
         print(f"运行Chế độ: {mode_strategy['description']}")
 
+    def _start_required_services(self) -> None:
+        """Auto-start external services needed by configured scrapers."""
+        if not self.service_manager:
+            return
+        platform_ids = [p["id"] for p in CONFIG["PLATFORMS"]]
+        needed = self.service_manager.services_needed(platform_ids)
+        if needed:
+            print(f"\n🔧 External services needed: {needed}")
+            self.service_manager.start_required(needed=needed)
+
+    def _stop_services(self) -> None:
+        """Stop all managed external services."""
+        if self.service_manager:
+            self.service_manager.stop_all()
+
     def _crawl_data(self) -> Tuple:
-        # Separate platforms by type
-        api_platforms = []
-        scraper_platforms = []
-        
-        for platform in CONFIG["PLATFORMS"]:
-            if platform.get("type") == "scraper":
-                scraper_platforms.append(platform)
-            else:
-                api_platforms.append(platform)
-
-        # Build ids for API platforms
-        api_ids = []
-        for platform in api_platforms:
-            if "name" in platform:
-                api_ids.append((platform["id"], platform["name"]))
-            else:
-                api_ids.append(platform["id"])
-
         all_platform_names = [p.get('name', p['id']) for p in CONFIG['PLATFORMS']]
         print(f"配置của监控平台: {all_platform_names}")
-        print(f"bắt đầuthu thậpdữ liệu，Yêu cầu间隔 {self.request_interval} mili giây")
         ensure_directory_exists("output")
 
-        # Crawl API sources
-        results, id_to_name, failed_ids = self.data_fetcher.crawl_websites(api_ids, self.request_interval)
+        # Start external services (rod_service, etc.) if needed
+        self._start_required_services()
 
-        # Crawl scraper sources (Vietnamese)
-        if self.vn_fetcher and scraper_platforms:
-            scraper_ids = []
-            for platform in scraper_platforms:
-                if "name" in platform:
-                    scraper_ids.append((platform["id"], platform["name"]))
+        # ── Async concurrent crawl (preferred) ────────────────────────────
+        if ASYNC_CRAWLER_AVAILABLE:
+            print(f"🚀 Async concurrent crawl: {len(CONFIG['PLATFORMS'])} platforms")
+            results, id_to_name, failed_ids = crawl_all_sync(
+                CONFIG["PLATFORMS"],
+                proxy_url=self.proxy_url,
+            )
+        else:
+            # ── Fallback: sequential crawl ────────────────────────────────
+            print(f"bắt đầuthu thậpdữ liệu，Yêu cầu间隔 {self.request_interval} mili giây")
+            api_platforms = []
+            scraper_platforms = []
+            for platform in CONFIG["PLATFORMS"]:
+                if platform.get("type") == "scraper":
+                    scraper_platforms.append(platform)
                 else:
-                    scraper_ids.append(platform["id"])
-            
-            if scraper_ids:
-                print(f"\n🇻🇳 Scraper sources: {[p.get('name', p['id']) for p in scraper_platforms]}")
-                vn_results, vn_id_to_name, vn_failed_ids = self.vn_fetcher.crawl_websites(scraper_ids)
-                
-                id_to_name.update(vn_id_to_name)
-                failed_ids.extend(vn_failed_ids)
-                results.update(vn_results)
+                    api_platforms.append(platform)
+
+            api_ids = []
+            for platform in api_platforms:
+                if "name" in platform:
+                    api_ids.append((platform["id"], platform["name"]))
+                else:
+                    api_ids.append(platform["id"])
+
+            results, id_to_name, failed_ids = self.data_fetcher.crawl_websites(api_ids, self.request_interval)
+
+            if self.vn_fetcher and scraper_platforms:
+                scraper_ids = []
+                for platform in scraper_platforms:
+                    if "name" in platform:
+                        scraper_ids.append((platform["id"], platform["name"]))
+                    else:
+                        scraper_ids.append(platform["id"])
+                if scraper_ids:
+                    print(f"\n🇻🇳 Scraper sources: {[p.get('name', p['id']) for p in scraper_platforms]}")
+                    vn_results, vn_id_to_name, vn_failed_ids = self.vn_fetcher.crawl_websites(scraper_ids)
+                    id_to_name.update(vn_id_to_name)
+                    failed_ids.extend(vn_failed_ids)
+                    results.update(vn_results)
 
         # Save to database for future API usage
         if results:
@@ -603,21 +644,30 @@ class NewsAnalyzer:
         except Exception as e:
             print(f"phân tích流程执行出错: {e}")
             raise
+        finally:
+            self._stop_services()
+
+
+def run_crawl_pipeline() -> bool:
+    """Programmatic entry point for in-process scheduling.
+
+    Identical to running `python main.py` but without the os.exit().
+    Returns True on success, False on missing-config, raises on other errors.
+    """
+    try:
+        analyzer = NewsAnalyzer()
+        analyzer.run()
+        return True
+    except FileNotFoundError as e:
+        print(f"❌ File cấu hìnhlỗi: {e}")
+        return False
 
 
 def main():
     try:
         print("Using refactored modular structure with legacy function compatibility")
         print()
-        analyzer = NewsAnalyzer()
-        analyzer.run()
-        return True
-    except FileNotFoundError as e:
-        print(f"❌ File cấu hìnhlỗi: {e}")
-        print("\nVui lòng đảm bảo các file sau tồn tại:")
-        print("  • config/config.yaml")
-        print("  • config/frequency_words.txt")
-        return False
+        return run_crawl_pipeline()
     except Exception as e:
         print(f"❌ Lỗi chạy chương trình: {e}")
         raise
