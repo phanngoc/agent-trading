@@ -12,13 +12,14 @@ from tradingagents.llm_clients import create_llm_client
 
 from tradingagents.agents import *
 from tradingagents.default_config import DEFAULT_CONFIG
-from tradingagents.agents.utils.memory import FinancialSituationMemory
+from tradingagents.agents.utils.memory import FinancialSituationMemory, TradingMemoryLog
 from tradingagents.agents.utils.agent_states import (
     AgentState,
     InvestDebateState,
     RiskDebateState,
 )
 from tradingagents.dataflows.config import set_config
+from tradingagents.graph.checkpointer import get_checkpointer, thread_id
 
 # Import the new abstract tool methods from agent_utils
 from tradingagents.agents.utils.agent_utils import (
@@ -100,6 +101,9 @@ class TradingAgentsGraph:
         self.trader_memory = FinancialSituationMemory("trader_memory", self.config)
         self.invest_judge_memory = FinancialSituationMemory("invest_judge_memory", self.config)
         self.risk_manager_memory = FinancialSituationMemory("risk_manager_memory", self.config)
+
+        # Append-only outcome log (file-backed). Inert when memory_log_path is unset.
+        self.trading_log = TradingMemoryLog(self.config)
 
         # Create tool nodes
         self.tool_nodes = self._create_tool_nodes()
@@ -187,39 +191,62 @@ class TradingAgentsGraph:
         }
 
     def propagate(self, company_name, trade_date):
-        """Run the trading agents graph for a company on a specific date."""
+        """Run the trading agents graph for a company on a specific date.
+
+        When ``checkpoint_enabled`` is True in config, the run is wrapped in
+        a per-ticker SQLite checkpoint context so a crash mid-run can be
+        resumed by re-invoking propagate() with the same (ticker, date).
+        """
 
         self.ticker = company_name
 
-        # Initialize state
+        # Seed initial state with past_context from the file log (if any).
+        past_context = self.trading_log.get_past_context(company_name)
         init_agent_state = self.propagator.create_initial_state(
-            company_name, trade_date
+            company_name, trade_date, past_context=past_context
         )
         args = self.propagator.get_graph_args()
 
+        if self.config.get("checkpoint_enabled"):
+            data_dir = self.config["data_cache_dir"]
+            with get_checkpointer(data_dir, company_name) as saver:
+                graph = self.graph_setup.setup_graph_with_checkpointer(saver) \
+                    if hasattr(self.graph_setup, "setup_graph_with_checkpointer") \
+                    else self.graph
+                args = dict(args)
+                args["config"] = {
+                    **args.get("config", {}),
+                    "configurable": {"thread_id": thread_id(company_name, str(trade_date))},
+                }
+                final_state = self._run_graph(graph, init_agent_state, args)
+        else:
+            final_state = self._run_graph(self.graph, init_agent_state, args)
+
+        self.curr_state = final_state
+        self._log_state(trade_date, final_state)
+
+        # Phase A of outcome log: record pending entry. Inert when
+        # memory_log_path is unset, so callers see no behavior change.
+        self.trading_log.store_decision(
+            ticker=company_name,
+            trade_date=str(trade_date),
+            final_trade_decision=final_state["final_trade_decision"],
+        )
+
+        return final_state, self.process_signal(final_state["final_trade_decision"])
+
+    def _run_graph(self, graph, init_agent_state, args):
+        """Invoke graph in debug or standard mode and return final state."""
         if self.debug:
-            # Debug mode with tracing
             trace = []
-            for chunk in self.graph.stream(init_agent_state, **args):
+            for chunk in graph.stream(init_agent_state, **args):
                 if len(chunk["messages"]) == 0:
                     pass
                 else:
                     chunk["messages"][-1].pretty_print()
                     trace.append(chunk)
-
-            final_state = trace[-1]
-        else:
-            # Standard mode without tracing
-            final_state = self.graph.invoke(init_agent_state, **args)
-
-        # Store current state for reflection
-        self.curr_state = final_state
-
-        # Log state
-        self._log_state(trade_date, final_state)
-
-        # Return decision and processed signal
-        return final_state, self.process_signal(final_state["final_trade_decision"])
+            return trace[-1]
+        return graph.invoke(init_agent_state, **args)
 
     def _log_state(self, trade_date, final_state):
         """Log the final state to a JSON file."""

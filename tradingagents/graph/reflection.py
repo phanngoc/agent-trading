@@ -33,6 +33,18 @@ def resolve_benchmark(ticker: str, config: Optional[Dict[str, Any]] = None) -> s
     return benchmark_map.get("", "SPY")
 
 
+_LOG_REFLECTION_PROMPT = (
+    "You are a trading analyst reviewing your own past decision now that the outcome is known.\n"
+    "Write exactly 2-4 sentences of plain prose (no bullets, no headers, no markdown).\n\n"
+    "Cover in order:\n"
+    "1. Was the directional call correct? (cite the alpha figure)\n"
+    "2. Which part of the investment thesis held or failed?\n"
+    "3. One concrete lesson to apply to the next similar analysis.\n\n"
+    "Be specific and terse. Your output will be stored verbatim in a decision log "
+    "and re-read by future analysts, so every word must earn its place."
+)
+
+
 class Reflector:
     """Handles reflection on decisions and updating memory."""
 
@@ -40,6 +52,34 @@ class Reflector:
         """Initialize the reflector with an LLM."""
         self.quick_thinking_llm = quick_thinking_llm
         self.reflection_system_prompt = self._get_reflection_prompt()
+
+    def reflect_on_final_decision(
+        self,
+        final_decision: str,
+        raw_return: float,
+        alpha_return: float,
+        benchmark_name: str = "SPY",
+    ) -> str:
+        """Single terse reflection on the final trade decision with outcome context.
+
+        Used by the outcome-resolution path (TradingMemoryLog.update_with_outcome).
+        Produces 2-4 sentences of plain prose so the reflection re-injects
+        cleanly into future agent prompts without bloating the context window.
+        ``benchmark_name`` is the label for the alpha line (e.g. "SPY",
+        "^VNINDEX", "^N225").
+        """
+        messages = [
+            ("system", _LOG_REFLECTION_PROMPT),
+            (
+                "human",
+                (
+                    f"Raw return: {raw_return:+.1%}\n"
+                    f"Alpha vs {benchmark_name}: {alpha_return:+.1%}\n\n"
+                    f"Final Decision:\n{final_decision}"
+                ),
+            ),
+        ]
+        return self.quick_thinking_llm.invoke(messages).content
 
     def _get_reflection_prompt(self) -> str:
         """Get the system prompt for reflection."""

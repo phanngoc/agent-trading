@@ -196,6 +196,74 @@ def test_phase7_global_news_tool_optional_args():
     assert sig_params["limit"].default is None
 
 
+def test_phase6_trading_memory_log_no_path():
+    """When memory_log_path is unset, all operations are no-ops."""
+    from tradingagents.agents.utils.memory import TradingMemoryLog
+
+    log = TradingMemoryLog({})
+    log.store_decision("NVDA", "2026-05-13", "FINAL TRANSACTION PROPOSAL: **BUY**")
+    assert log.load_entries() == []
+    assert log.get_past_context("NVDA") == ""
+
+
+def test_phase6_trading_memory_log_roundtrip(tmp_path):
+    """End-to-end: store_decision + update_with_outcome + get_past_context."""
+    from tradingagents.agents.utils.memory import TradingMemoryLog
+
+    cfg = {"memory_log_path": str(tmp_path / "log.md")}
+    log = TradingMemoryLog(cfg)
+
+    log.store_decision("NVDA", "2026-05-13", "FINAL TRANSACTION PROPOSAL: **BUY**")
+    log.store_decision("NVDA", "2026-05-13", "FINAL TRANSACTION PROPOSAL: **BUY**")  # idempotent
+    entries = log.load_entries()
+    assert len(entries) == 1 and entries[0]["pending"] is True
+    assert entries[0]["rating"] == "Buy"
+
+    log.update_with_outcome(
+        ticker="NVDA",
+        trade_date="2026-05-13",
+        raw_return=0.123,
+        alpha_return=0.045,
+        holding_days=30,
+        reflection="The bullish call was right on AI capex tailwinds.",
+    )
+    entries = log.load_entries()
+    assert entries[0]["pending"] is False
+    assert entries[0]["raw"] == "+12.3%"
+    assert entries[0]["alpha"] == "+4.5%"
+    assert "AI capex" in entries[0]["reflection"]
+
+    context = log.get_past_context("NVDA")
+    assert "Past analyses of NVDA" in context
+    assert "+12.3%" in context
+
+
+def test_phase6_checkpointer_db_path(tmp_path):
+    from tradingagents.graph.checkpointer import (
+        get_checkpointer, thread_id, has_checkpoint, clear_all_checkpoints,
+    )
+
+    with get_checkpointer(str(tmp_path), "NVDA") as saver:
+        assert saver is not None
+    assert (tmp_path / "checkpoints" / "NVDA.db").exists()
+    assert not has_checkpoint(str(tmp_path), "NVDA", "2026-05-13")
+    assert clear_all_checkpoints(str(tmp_path)) == 1
+
+
+def test_phase6_safe_ticker_component_rejects_path_traversal():
+    from tradingagents.dataflows.utils import safe_ticker_component
+
+    assert safe_ticker_component("NVDA") == "NVDA"
+    assert safe_ticker_component("VIC.VN") == "VIC.VN"
+    assert safe_ticker_component("^GSPC") == "^GSPC"
+    for bad in ("../etc/passwd", "..", "..\\foo", "NV/DA", "NVDA;rm", ""):
+        try:
+            safe_ticker_component(bad)
+            assert False, f"should have rejected {bad!r}"
+        except (ValueError, TypeError):
+            pass
+
+
 def test_phase1_env_overlay():
     import importlib
     import os
