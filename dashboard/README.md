@@ -1,36 +1,106 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TradingAgents Dashboard
 
-## Getting Started
+Next.js 16 + React 19 + Tailwind 4 + shadcn/ui + Zustand + TanStack Query.
+Theo dõi VNINDEX, chỉ số toàn cầu, vàng, dầu, crypto, và trade-agent daily runs.
 
-First, run the development server:
+## Quick start
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cd dashboard
+pnpm install
+pnpm dev           # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Yêu cầu môi trường: Python venv của repo cha (`../venv`) đã cài `yfinance`
+và `vnstock`. Dashboard gọi vào Python qua child_process — không có lib
+market-data nào trong package.json.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Command | Mô tả |
+|---|---|
+| `pnpm dev` | Dev server (Turbopack), port 3000 |
+| `pnpm build` | Production build |
+| `pnpm typecheck` | TypeScript strict check, không emit |
+| `pnpm lint` | ESLint trên src/ |
+| `pnpm smoke` | Bash smoke test: start dev → curl tất cả pages + API JSON probes |
+| `pnpm run-daily` | Chạy watchlist VN qua `scripts/run_daily.sh` |
 
-## Learn More
+## Architecture
 
-To learn more about Next.js, take a look at the following resources:
+```
+┌──────────────────────────────────────────────────────────────┐
+│  Browser                                                      │
+│   ├─ Zustand     ui-store (timeframe, selectedTicker, theme) │
+│   └─ TanStack Q  server cache (quotes, vnindex, agent runs)  │
+└───────────────┬──────────────────────────────────────────────┘
+                │
+                ▼
+┌──────────────────────────────────────────────────────────────┐
+│  Next.js Route Handlers (Node runtime)                        │
+│   /api/markets/quotes  ←  scripts/fetch_quotes.py             │
+│   /api/markets/vnindex ←  inline python -c (vnstock)          │
+│   /api/agent/runs      ←  fs.readdir(eval_results/)           │
+│   /api/agent/trigger   →  spawn main.py (detached)            │
+└───────────────┬──────────────────────────────────────────────┘
+                │
+                ▼
+┌──────────────────────────────────────────────────────────────┐
+│  Python venv (repo root)                                      │
+│   ├─ yfinance  → global indices, vàng, dầu, crypto            │
+│   ├─ vnstock   → VNINDEX, HNX, UPCoM, VN equities             │
+│   └─ main.py   → TradingAgentsGraph (anthropic OAuth)         │
+└──────────────────────────────────────────────────────────────┘
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Pages
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Path              | Purpose |
+|---|---|
+| `/`               | Tổng quan — VNINDEX chart + latest agent decision + grouped markets grid |
+| `/markets`        | Bảng đầy đủ với tabs (VN / Global / Commodity / Crypto), sort cột |
+| `/vnindex`        | Chuyên sâu VN — chart + các index VN phụ |
+| `/agent`          | Lịch sử run + nút trigger phân tích thủ công |
+| `/agent/:t/:d`    | Chi tiết một run — final decision + reports breakdown |
+| `/settings`       | Cấu hình + ghi chú vận hành |
 
-## Deploy on Vercel
+## Daily run
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Lên lịch chạy agent hằng ngày:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+# Manual one-shot
+TICKERS="VIC.VN HPG.VN MWG.VN VCB.VN" ./scripts/run_daily.sh
+
+# macOS: launchd (weekdays at 19:00 sau khi VN market đóng)
+cp scripts/com.tradingagents.dailyrun.plist.example \
+   ~/Library/LaunchAgents/com.tradingagents.dailyrun.plist
+# Edit the path inside, then:
+launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.tradingagents.dailyrun.plist
+
+# Linux: cron
+0 19 * * 1-5 /path/to/dashboard/scripts/run_daily.sh
+```
+
+Auth: script không cần API key — kế thừa Claude Code OAuth từ
+`~/Library/Keychains/...Claude Code-credentials` (auto-discovery trong
+`tradingagents/llm_clients/anthropic_client.py`).
+
+## Symbols tracking
+
+Sửa `src/lib/symbols.ts` để thêm/bớt symbol. Auto routing:
+- `^VN*`, `VN30`, `HNX*`, `UPCOM*` → vnstock
+- `*.VN` → vnstock (strip suffix)
+- Khác → yfinance
+
+## Configuration
+
+Env vars (optional):
+- `TRADINGAGENTS_PYTHON` — đường dẫn python venv (default `../venv/bin/python`)
+
+## Lưu ý đầu tư
+
+Dashboard là công cụ research, **không phải lời khuyên đầu tư**.
+Mỗi quyết định từ agent là kết quả của một chuỗi LLM calls với
+risk model + market data tại thời điểm chạy. Hãy kiểm tra full
+debate history (`/agent/:ticker/:date`) trước khi vào lệnh thật.
