@@ -5,6 +5,7 @@ import { promises as fs } from "node:fs"
 import path from "node:path"
 import { randomUUID } from "node:crypto"
 import { logPath, runDir, writeStatus } from "@/lib/run-logs"
+import { ensureTrendNewsRunning } from "@/lib/services"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -50,7 +51,23 @@ export async function POST(req: Request) {
   const out = createWriteStream(logPath(runId), { flags: "a" })
   out.write(`[trigger] run_id=${runId} ticker=${ticker} date=${date} analysts=${analysts}\n`)
   out.write(`[trigger] cwd=${repoRoot}\n`)
-  out.write(`[trigger] python=${py}\n\n`)
+  out.write(`[trigger] python=${py}\n`)
+
+  // Best-effort: bring trend_news online before the agent's news tool fires.
+  // The route-level fallback in interface.py will gracefully degrade to
+  // vnstock + yfinance if this never becomes healthy, so we don't block
+  // the trigger — just record the outcome in the log so the user sees
+  // which sources are available.
+  try {
+    const svc = await ensureTrendNewsRunning(8000)
+    out.write(`[trigger] trend_news ${svc.state}${svc.message ? ` — ${svc.message}` : ""}\n`)
+    if (svc.state !== "up") {
+      out.write(`[trigger] news routing will fall back to vnstock (KBS) + yfinance\n`)
+    }
+  } catch (e) {
+    out.write(`[trigger] trend_news probe failed: ${e instanceof Error ? e.message : String(e)}\n`)
+  }
+  out.write("\n")
 
   const child = spawn(
     py,

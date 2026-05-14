@@ -34,6 +34,38 @@ def _get_stock_obj(symbol: str, source: str = 'VCI'):
     return Vnstock().stock(symbol=clean_symbol(symbol), source=source)
 
 
+# Source fallback order for company-level data (news, overview, insider_deals).
+# VCI's company endpoint started returning a payload without the 'data' key
+# in late-2026 (KeyError: 'data' on Company.__init__); KBS still serves the
+# same fields. quote.history continues to work fine via VCI so price/index
+# routes (get_stock_data) keep their default.
+_COMPANY_SOURCES: tuple[str, ...] = ("KBS", "VCI")
+
+
+def _get_company_with_fallback(symbol: str):
+    """Yield (source, stock_obj) tuples until Company construction succeeds.
+
+    Constructing ``Vnstock().stock(...)`` eagerly builds the per-source
+    Company helper, so a broken upstream API surfaces here as a KeyError
+    rather than later. The caller iterates and picks the first source that
+    actually returns data.
+    """
+    from vnstock import Vnstock
+    sym = clean_symbol(symbol)
+    last_err: Exception | None = None
+    for src in _COMPANY_SOURCES:
+        try:
+            obj = Vnstock().stock(symbol=sym, source=src)
+            # Touch a cheap attribute to force lazy validation paths.
+            _ = obj.company.SUPPORTED_SOURCES if hasattr(obj.company, "SUPPORTED_SOURCES") else None
+            yield src, obj
+        except Exception as e:  # noqa: BLE001 — we want to try every source
+            last_err = e
+            continue
+    if last_err is not None:
+        raise last_err
+
+
 # ── Price data ─────────────────────────────────────────────────────────────────
 
 def get_stock_data(
@@ -257,15 +289,35 @@ def get_insider_transactions(ticker: str, curr_date: str = None) -> str:
 
 
 def get_news(ticker: str, curr_date: str = None, look_back_days: int = 7) -> str:
-    """Company news from vnstock."""
+    """Company news from vnstock with source-fallback (KBS → VCI)."""
     sym = clean_symbol(ticker)
-    try:
-        s = _get_stock_obj(sym)
-        df = s.company.news()
-        if df is None or df.empty:
-            return f"No news data for {sym}"
-        # Show latest 20 items
-        result = df.head(20).to_string()
-        return f"=== News for {sym} ===\n{result}"
-    except Exception as e:
-        return f"vnstock error fetching news for {sym}: {e}"
+    errors: list[str] = []
+    for src, s in _get_company_with_fallback(sym):
+        try:
+            df = s.company.news()
+            if df is None or df.empty:
+                errors.append(f"{src}: empty")
+                continue
+            result = df.head(20).to_string()
+            return f"=== News for {sym} (source: {src}) ===\n{result}"
+        except Exception as e:  # noqa: BLE001
+            errors.append(f"{src}: {type(e).__name__}: {e}")
+            continue
+    return f"vnstock: no news source returned data for {sym} ({'; '.join(errors)})"
+
+
+def get_insider_transactions_fallback(ticker: str, curr_date: str = None) -> str:
+    """Helper reused by interface — same fallback as get_news."""
+    sym = clean_symbol(ticker)
+    errors: list[str] = []
+    for src, s in _get_company_with_fallback(sym):
+        try:
+            df = s.company.insider_deals()
+            if df is None or df.empty:
+                errors.append(f"{src}: empty")
+                continue
+            return f"=== Insider Transactions for {sym} (source: {src}) ===\n{df.tail(20).to_string()}"
+        except Exception as e:  # noqa: BLE001
+            errors.append(f"{src}: {type(e).__name__}: {e}")
+            continue
+    return f"vnstock: no insider source returned data for {sym} ({'; '.join(errors)})"

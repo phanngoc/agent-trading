@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TriggerAgentButton } from "@/components/trigger-agent-button"
+import { ServiceStatusPill } from "@/components/service-status-pill"
 import { decisionClass } from "@/lib/format"
 
 export default function AgentPage() {
@@ -28,6 +29,7 @@ export default function AgentPage() {
             Lịch sử các lần chạy multi-agent (market → news → bull/bear → trader → risk).
             Mỗi quyết định kèm full debate history + sentiment + fundamentals.
           </p>
+          <div className="mt-2"><ServiceStatusPill /></div>
         </div>
         <TriggerAgentButton />
       </header>
