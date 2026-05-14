@@ -9,15 +9,45 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
+import { MarkdownReport } from "@/components/markdown-report"
+import { NewsList } from "@/components/news-list"
 import { decisionClass } from "@/lib/format"
 
 type Props = { params: Promise<{ ticker: string; date: string }> }
+
+type AgentRun = {
+  ticker: string
+  date: string
+  decision: string
+  rating?: string
+  final_trade_decision?: string
+  investment_plan?: string
+  trader_investment_plan?: string
+  market_report?: string
+  sentiment_report?: string
+  news_report?: string
+  fundamentals_report?: string
+  error?: string
+}
+
+const TABS = [
+  { value: "market",       label: "Phân tích kỹ thuật", key: "market_report" },
+  { value: "news",         label: "Tin tức",            key: "news_report" },
+  { value: "sentiment",    label: "Cảm xúc thị trường", key: "sentiment_report" },
+  { value: "fundamentals", label: "Cơ bản",             key: "fundamentals_report" },
+  { value: "plan",         label: "Kế hoạch đầu tư",    key: "investment_plan" },
+  { value: "trader",       label: "Kế hoạch giao dịch", key: "trader_investment_plan" },
+] as const
+
+const DECISION_VN: Record<string, string> = {
+  BUY: "MUA", SELL: "BÁN", HOLD: "GIỮ",
+}
 
 export default function AgentRunPage({ params }: Props) {
   const { ticker, date } = use(params)
   const decodedTicker = decodeURIComponent(ticker)
 
-  const { data: run, isLoading } = useQuery({
+  const { data: run, isLoading } = useQuery<AgentRun>({
     queryKey: ["agent", "run", decodedTicker, date],
     queryFn: () => fetch(`/api/agent/runs/${encodeURIComponent(decodedTicker)}/${date}`).then((r) => r.json()),
   })
@@ -43,6 +73,8 @@ export default function AgentRunPage({ params }: Props) {
     )
   }
 
+  const decisionLabel = DECISION_VN[run.decision] ?? run.decision
+
   return (
     <div className="container mx-auto max-w-5xl px-4 py-6 space-y-4">
       <Button variant="ghost" size="sm" nativeButton={false} render={<Link href="/agent" />}>
@@ -56,49 +88,44 @@ export default function AgentRunPage({ params }: Props) {
           </h1>
           {run.rating && (
             <p className="mt-1 text-sm text-muted-foreground">
-              Rating: <strong>{run.rating}</strong>
+              Xếp hạng: <strong>{run.rating}</strong>
             </p>
           )}
         </div>
         <Badge variant="outline" className={`text-sm ${decisionClass(run.decision)}`}>
-          {run.decision}
+          {decisionLabel}
         </Badge>
       </header>
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Final Trade Decision</CardTitle>
+          <CardTitle className="text-base">Quyết định giao dịch cuối cùng</CardTitle>
         </CardHeader>
         <CardContent>
-          <pre className="whitespace-pre-wrap text-sm leading-relaxed font-sans">
-            {run.final_trade_decision ?? "—"}
-          </pre>
+          <MarkdownReport content={run.final_trade_decision ?? ""} />
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="market">
+      <Tabs defaultValue="news">
         <TabsList className="flex-wrap">
-          <TabsTrigger value="market">Market</TabsTrigger>
-          <TabsTrigger value="news">News</TabsTrigger>
-          <TabsTrigger value="sentiment">Sentiment</TabsTrigger>
-          <TabsTrigger value="fundamentals">Fundamentals</TabsTrigger>
-          <TabsTrigger value="plan">Investment Plan</TabsTrigger>
-          <TabsTrigger value="trader">Trader Plan</TabsTrigger>
+          {TABS.map((t) => (
+            <TabsTrigger key={t.value} value={t.value}>{t.label}</TabsTrigger>
+          ))}
         </TabsList>
-        {[
-          ["market", "market_report"],
-          ["news", "news_report"],
-          ["sentiment", "sentiment_report"],
-          ["fundamentals", "fundamentals_report"],
-          ["plan", "investment_plan"],
-          ["trader", "trader_investment_plan"],
-        ].map(([tab, key]) => (
-          <TabsContent key={tab} value={tab} className="mt-3">
+
+        {TABS.map((t) => (
+          <TabsContent key={t.value} value={t.value} className="mt-3 space-y-4">
+            {/* News tab gets an extra "Tin tức nguồn" panel above the LLM's
+                synthesized news report so the user can cross-check the
+                agent's analysis against the raw articles. */}
+            {t.value === "news" && <NewsList ticker={decodedTicker} />}
+
             <Card>
-              <CardContent className="p-4">
-                <pre className="whitespace-pre-wrap text-sm leading-relaxed font-sans">
-                  {(run[key as keyof typeof run] as string) || "—"}
-                </pre>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">{t.label}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <MarkdownReport content={(run[t.key as keyof AgentRun] as string) ?? ""} />
               </CardContent>
             </Card>
           </TabsContent>
