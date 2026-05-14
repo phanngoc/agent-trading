@@ -30,6 +30,7 @@ export function LatestAgentDecision() {
           variant="ghost"
           size="sm"
           className="text-xs"
+          nativeButton={false}
           render={<Link href="/agent" />}
         >
           Xem tất cả <ChevronRight className="size-3" />

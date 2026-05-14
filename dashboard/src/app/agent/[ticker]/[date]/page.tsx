@@ -33,7 +33,7 @@ export default function AgentRunPage({ params }: Props) {
   if (!run || run.error) {
     return (
       <div className="container mx-auto max-w-5xl px-4 py-6">
-        <Button variant="ghost" size="sm" render={<Link href="/agent" />}>
+        <Button variant="ghost" size="sm" nativeButton={false} render={<Link href="/agent" />}>
           <ArrowLeft className="size-4" /> Quay lại
         </Button>
         <p className="mt-4 text-sm text-muted-foreground">
@@ -45,7 +45,7 @@ export default function AgentRunPage({ params }: Props) {
 
   return (
     <div className="container mx-auto max-w-5xl px-4 py-6 space-y-4">
-      <Button variant="ghost" size="sm" render={<Link href="/agent" />}>
+      <Button variant="ghost" size="sm" nativeButton={false} render={<Link href="/agent" />}>
         <ArrowLeft className="size-4" /> Quay lại
       </Button>
 
