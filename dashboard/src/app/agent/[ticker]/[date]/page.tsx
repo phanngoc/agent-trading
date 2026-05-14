@@ -31,12 +31,15 @@ type AgentRun = {
 }
 
 const TABS = [
-  { value: "market",       label: "Phân tích kỹ thuật", key: "market_report" },
-  { value: "news",         label: "Tin tức",            key: "news_report" },
-  { value: "sentiment",    label: "Cảm xúc thị trường", key: "sentiment_report" },
-  { value: "fundamentals", label: "Cơ bản",             key: "fundamentals_report" },
-  { value: "plan",         label: "Kế hoạch đầu tư",    key: "investment_plan" },
-  { value: "trader",       label: "Kế hoạch giao dịch", key: "trader_investment_plan" },
+  // "decision" is the first tab so the user lands on the final trade
+  // decision by default — it's the most-read view when reviewing a run.
+  { value: "decision",     label: "Quyết định cuối cùng", key: "final_trade_decision" },
+  { value: "news",         label: "Tin tức",              key: "news_report" },
+  { value: "market",       label: "Phân tích kỹ thuật",   key: "market_report" },
+  { value: "sentiment",    label: "Cảm xúc thị trường",   key: "sentiment_report" },
+  { value: "fundamentals", label: "Cơ bản",               key: "fundamentals_report" },
+  { value: "plan",         label: "Kế hoạch đầu tư",      key: "investment_plan" },
+  { value: "trader",       label: "Kế hoạch giao dịch",   key: "trader_investment_plan" },
 ] as const
 
 const DECISION_VN: Record<string, string> = {
@@ -97,17 +100,13 @@ export default function AgentRunPage({ params }: Props) {
         </Badge>
       </header>
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Quyết định giao dịch cuối cùng</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <MarkdownReport content={run.final_trade_decision ?? ""} />
-        </CardContent>
-      </Card>
-
-      <Tabs defaultValue="news">
-        <TabsList className="flex-wrap">
+      <Tabs defaultValue="decision">
+        {/* Tabs sit at the top — the standalone "Final Decision" card was
+            promoted into the first tab so all sections (decision + the
+            6 supporting reports) live behind a single nav row. Horizontal
+            scroll instead of flex-wrap keeps every tab on one line even
+            on narrow viewports. */}
+        <TabsList className="w-full overflow-x-auto justify-start flex-nowrap [&>*]:whitespace-nowrap [&>*]:shrink-0">
           {TABS.map((t) => (
             <TabsTrigger key={t.value} value={t.value}>{t.label}</TabsTrigger>
           ))}
