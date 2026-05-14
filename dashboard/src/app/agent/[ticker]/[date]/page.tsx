@@ -118,7 +118,9 @@ export default function AgentRunPage({ params }: Props) {
             {/* News tab gets an extra "Tin tức nguồn" panel above the LLM's
                 synthesized news report so the user can cross-check the
                 agent's analysis against the raw articles. */}
-            {t.value === "news" && <NewsList ticker={decodedTicker} />}
+            {t.value === "news" && (
+              <NewsList ticker={decodedTicker} date={date} daysBack={30} />
+            )}
 
             <Card>
               <CardHeader className="pb-2">
