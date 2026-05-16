@@ -36,15 +36,23 @@ venv/bin/python -m scripts.benchmark.run_daily --dry-run
 venv/bin/python -m scripts.benchmark.run_daily --skip-agent
 ```
 
-### Cài cron auto-run hàng ngày
+### Cài auto-run hàng ngày (launchd trên macOS)
 
 ```bash
-scripts/benchmark/install_cron.sh           # cài (idempotent)
-scripts/benchmark/install_cron.sh --status  # kiểm tra
-scripts/benchmark/install_cron.sh --remove  # gỡ
+scripts/benchmark/install_launchd.sh             # cài (idempotent)
+scripts/benchmark/install_launchd.sh --status    # kiểm tra trạng thái load
+scripts/benchmark/install_launchd.sh --run-now   # fire one-off (test)
+scripts/benchmark/install_launchd.sh --remove    # unload + xoá plist
 ```
 
-Cron chạy **17:00 ICT (10:00 UTC) Thứ 2-Thứ 6**. Log tại `benchmarks/daily/_cron.log`.
+Chạy **17:00 local time, Thứ 2 → Thứ 6**. Plist tại
+`~/Library/LaunchAgents/com.tradingagents.daily-benchmark.plist`,
+logs tại `benchmarks/daily/_launchd.{log,err}`.
+
+> **Tại sao launchd thay vì cron?** macOS deprecate cron — cần Full Disk
+> Access entitlement và bỏ job khi máy sleep. launchd là scheduler native
+> của macOS, handle sleep/wake transparent. Trên Linux thì viết một
+> systemd timer hoặc dùng cron — file installer này macOS-only.
 
 ## Cấu hình
 
@@ -144,10 +152,10 @@ eval_results/*/...json ──┐    │
               └── lockfile.py
 
 scripts/benchmark/
-├── seed_history.py    Backfill OHLCV
-├── run_backtest.py    Replay tất cả strategies
-├── run_daily.py       Orchestrator (cron target)
-└── install_cron.sh    Setup local cron
+├── seed_history.py     Backfill OHLCV
+├── run_backtest.py     Replay tất cả strategies
+├── run_daily.py        Orchestrator (launchd / cron target)
+└── install_launchd.sh  Setup macOS LaunchAgent
 ```
 
 ## Tests
@@ -169,18 +177,25 @@ venv/bin/python -m pytest tests/benchmark/ -v
 
 ## Troubleshooting
 
-**Cron không chạy**
+**LaunchAgent không fire**
 
 ```bash
-# Check cron entry tồn tại
-scripts/benchmark/install_cron.sh --status
+# Check trạng thái load
+scripts/benchmark/install_launchd.sh --status
 
-# Tail log
-tail -f benchmarks/daily/_cron.log
+# Tail logs (stdout + stderr riêng)
+tail -f benchmarks/daily/_launchd.log
+tail -f benchmarks/daily/_launchd.err
 
-# Test command identical to what cron sẽ chạy
+# Fire một lần ngay không đợi schedule
+scripts/benchmark/install_launchd.sh --run-now
+
+# Hoặc chạy y nguyên như launchd sẽ chạy
 cd "$REPO_ROOT" && venv/bin/python -m scripts.benchmark.run_daily
 ```
+
+Lỗi `LastExitStatus` khác 0 trong status output ⇒ kiểm tra stderr log.
+launchd sẽ tự retry ở lần fire kế tiếp theo lịch (Mon-Fri 17:00).
 
 **vnstock rate limited (20 req/min guest)**
 

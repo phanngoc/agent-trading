@@ -4,4 +4,6 @@
 state/run_daily.lock
 state/user_portfolio.json
 daily/_cron.log
+daily/_launchd.log
+daily/_launchd.err
 daily/*/_agent_logs/
