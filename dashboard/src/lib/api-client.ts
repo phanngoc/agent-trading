@@ -34,6 +34,85 @@ async function get<T>(path: string): Promise<T> {
   return res.json() as Promise<T>
 }
 
+// ── Benchmark types — mirror dashboard/src/lib/benchmark.ts ───────────
+
+export type StrategyScorecard = {
+  strategy_id: string
+  n_days: number
+  total_return_pct: number
+  annualized_return_pct: number
+  annualized_vol_pct: number
+  sharpe: number
+  max_drawdown_pct: number
+  n_trades: number
+  hit_rate: number
+  avg_return_per_trade_pct: number
+  profit_factor: number | string
+  alpha_annualized_pct: number | null
+  beta: number | null
+  r_squared: number | null
+  t_stat: number | null
+  p_value: number | null
+}
+
+export type RunScorecard = {
+  run_date: string
+  window: { start: string; end: string; n_trading_days: number }
+  benchmark: string
+  initial_capital_vnd: number
+  strategies: StrategyScorecard[]
+}
+
+export type RunSummary = {
+  date: string
+  hasBrief: boolean
+  hasScorecard: boolean
+  hasReport: boolean
+  agentLogs: string[]
+  strategies?: string[]
+}
+
+export type LockStatus = { running: boolean; pid?: number; startedAt?: string }
+
+export type DecisionRow = {
+  strategy_id: string
+  ticker: string
+  decision_date: string
+  action: "BUY" | "HOLD" | "SELL"
+  rationale?: string | null
+  source_path?: string | null
+}
+
+export type ExecutionRow = {
+  decision_date: string
+  ticker: string
+  action: string
+  fill_date: string | null
+  status: string
+  quantity: number
+  fill_price: number
+  realized_pnl_vnd: number
+  note: string | null
+}
+
+export type StrategyDecisionDump = {
+  strategy_id: string
+  kind: string
+  decisions: DecisionRow[]
+  execution_log: ExecutionRow[]
+  final_portfolio: unknown
+}
+
+export type RunDetail = {
+  date: string
+  scorecard: RunScorecard | null
+  brief: string | null
+  report: string | null
+  decisions: Record<string, StrategyDecisionDump | null>
+  agentLogs: string[]
+  equityCurves: string | null
+}
+
 export const api = {
   quotes: () => get<{ quotes: Quote[] }>("/api/markets/quotes"),
   vnIndex: () => get<Quote>("/api/markets/vnindex"),
@@ -49,4 +128,15 @@ export const api = {
     if (!res.ok) throw new Error(`trigger → ${res.status}`)
     return res.json() as Promise<{ ok: boolean; run_id: string; ticker: string; date: string }>
   },
+
+  // ── Benchmark surface ───────────────────────────────────────────
+  benchmarkRuns: () => get<{ runs: RunSummary[]; lock: LockStatus }>("/api/benchmark/runs"),
+  benchmarkRun: (date: string) => get<RunDetail>(`/api/benchmark/runs/${date}`),
+  benchmarkAgentLog: async (date: string, ticker: string): Promise<string> => {
+    const res = await fetch(`/api/benchmark/runs/${date}/agent-log/${ticker}`, { cache: "no-store" })
+    if (!res.ok) throw new Error(`agent log → ${res.status}`)
+    return res.text()
+  },
+  benchmarkCronLog: (lines = 200) =>
+    get<{ lines: string[]; count: number }>(`/api/benchmark/cron-log?lines=${lines}`),
 }

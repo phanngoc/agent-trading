@@ -2,13 +2,14 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Activity, BarChart3, Bot, LayoutDashboard, Settings, TrendingUp } from "lucide-react"
+import { Activity, BarChart3, Bot, Gauge, LayoutDashboard, Settings, TrendingUp } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const NAV = [
   { href: "/", label: "Tổng quan", icon: LayoutDashboard },
   { href: "/markets", label: "Markets", icon: BarChart3 },
   { href: "/agent", label: "Trade Agent", icon: Bot },
+  { href: "/benchmark", label: "Benchmark", icon: Gauge },
   { href: "/vnindex", label: "VNINDEX", icon: TrendingUp },
   { href: "/settings", label: "Cài đặt", icon: Settings },
 ] as const

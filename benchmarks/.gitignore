@@ -1,0 +1,7 @@
+# Local-runtime artifacts we never want in version control.
+# (Daily output dirs ARE kept — useful as reference for new contributors.)
+
+state/run_daily.lock
+state/user_portfolio.json
+daily/_cron.log
+daily/*/_agent_logs/

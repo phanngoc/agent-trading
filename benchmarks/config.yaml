@@ -1,0 +1,111 @@
+# Benchmark configuration — single source of truth for the daily evaluation
+# pipeline. Read by scripts/benchmark/*.py and tradingagents.benchmark.*
+#
+# This is the rulebook that decides whether TradingAgents (or any other
+# strategy) is "beating the market" — keep it stable across the evaluation
+# window so historical numbers stay comparable. If you change fees, sizing,
+# or the watchlist mid-run, document it in benchmarks/CHANGELOG.md and
+# treat the old data as a separate experiment.
+
+# ── Universe ──────────────────────────────────────────────────────────────
+# Ten VN30 large-caps spread across sectors: dairy, steel, banking (×4),
+# realty (×2), tech, retail, energy. Diversified enough that single-sector
+# shocks don't dominate; small enough that one full agent run costs ~$2-5.
+watchlist:
+  - VNM   # Vinamilk         — F&B
+  - HPG   # Hoa Phat         — Steel
+  - TCB   # Techcombank      — Bank (private)
+  - VIC   # Vingroup         — Real estate / conglomerate
+  - FPT   # FPT Corp         — Technology
+  - MWG   # Mobile World     — Retail
+  - MBB   # MB Bank          — Bank
+  - CTG   # VietinBank       — Bank (state)
+  - BID   # BIDV             — Bank (state)
+  - GAS   # PetroVietnam Gas — Energy
+
+# Benchmark for alpha computation. VN30 ETF is the cleanest comparable —
+# tracks the same large-cap universe our watchlist samples from.
+benchmark_ticker: VNINDEX
+benchmark_kind: index     # 'index' (price-only) or 'etf' (tracks dividends)
+
+# ── Paper capital ─────────────────────────────────────────────────────────
+# 1 billion VND per strategy. Realistic for a retail trader; large enough
+# that fixed-fee per-trade costs are noise but small enough that we're not
+# pretending to be institutional.
+initial_capital_vnd: 1_000_000_000
+
+# ── Execution model ───────────────────────────────────────────────────────
+# All decisions arrive EOD (after market close) — we execute the next
+# trading day at the open price. This mirrors what a real trader using
+# the daily report would do.
+execution:
+  # When a BUY/SELL decision is issued on day T at EOD, fill at day T+1
+  # opening price. Adjust if your real workflow places orders at close.
+  fill_offset_days: 1
+  fill_price: open          # 'open' | 'close' | 'vwap' (vwap requires intraday data)
+
+  # T+2.5 settlement on HOSE/HNX: cash from a SELL on day T is only
+  # available for new BUYs on day T+2.5 (effectively T+3). We round up.
+  cash_settlement_days: 3
+
+  # All-in transaction costs for a retail account at major VN brokers
+  # (SSI/VPS/HSC ~2026). Buy side: broker fee only. Sell side: broker fee
+  # + 0.1% transaction tax on proceeds.
+  fee_buy_pct: 0.0015        # 0.15%
+  fee_sell_pct: 0.0025       # 0.25% (incl. 0.1% tax)
+
+  # Slippage applied on top of fill price to model market impact. 0 for
+  # large-cap VN30 names is realistic at retail size; bump up if you ever
+  # benchmark smaller tickers.
+  slippage_pct: 0.0
+
+# ── Position sizing ───────────────────────────────────────────────────────
+sizing:
+  # Equal-weight: each new position is 10% of current NAV at fill time.
+  # Caps fully-invested at 10 names; with one ticker per name no
+  # concentration concentration possible.
+  policy: equal_weight
+  target_weight_pct: 0.10
+  max_positions: 10
+  max_position_per_ticker: 1   # never double up on same ticker
+
+  # Minimum cash buffer kept idle (avoids the strategy going 100% leveraged
+  # in a euphoric phase, and leaves room for fees + slippage).
+  min_cash_pct: 0.05
+
+# ── Risk-free rate (for Sharpe) ───────────────────────────────────────────
+# 5y VN government bond yield, mid-2026 — adjust periodically.
+risk_free_rate_annual: 0.04
+
+# ── Evaluation window ─────────────────────────────────────────────────────
+# Backtest start date. Defaults to 180 days before today; override per-run
+# via CLI flag in scripts/benchmark/run_backtest.py.
+backtest_lookback_days: 180
+
+# ── Strategies to evaluate ────────────────────────────────────────────────
+# Each entry adds one column to the scorecard. TradingAgents reads from
+# eval_results/; baselines are computed inline (no LLM cost).
+strategies:
+  - id: tradingagents
+    kind: replay_from_eval_results
+    source_dir: eval_results
+    label: "TradingAgents (4-agent debate)"
+
+  - id: buyhold_vn30
+    kind: baseline.buyhold
+    label: "Buy & Hold (equal-weight watchlist)"
+
+  - id: sma_crossover
+    kind: baseline.sma_crossover
+    label: "SMA 10/30 crossover"
+    fast_window: 10
+    slow_window: 30
+
+  # Random walk — sanity check. If TradingAgents doesn't beat random
+  # decisively, that's a strong signal something's wrong.
+  - id: random_walk
+    kind: baseline.random
+    label: "Random (seeded BUY/HOLD/SELL)"
+    seed: 42
+    buy_prob: 0.20
+    sell_prob: 0.20

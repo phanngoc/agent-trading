@@ -1,0 +1,288 @@
+{
+  "strategy_id": "buyhold_vn30",
+  "kind": "baseline.buyhold",
+  "decisions": [
+    {
+      "strategy_id": "buyhold_vn30",
+      "ticker": "VNM",
+      "decision_date": "2026-01-20",
+      "action": "BUY",
+      "confidence": null,
+      "rationale": "Buy & Hold — entered on 2026-01-20",
+      "source_path": null
+    },
+    {
+      "strategy_id": "buyhold_vn30",
+      "ticker": "HPG",
+      "decision_date": "2026-01-20",
+      "action": "BUY",
+      "confidence": null,
+      "rationale": "Buy & Hold — entered on 2026-01-20",
+      "source_path": null
+    },
+    {
+      "strategy_id": "buyhold_vn30",
+      "ticker": "TCB",
+      "decision_date": "2026-01-20",
+      "action": "BUY",
+      "confidence": null,
+      "rationale": "Buy & Hold — entered on 2026-01-20",
+      "source_path": null
+    },
+    {
+      "strategy_id": "buyhold_vn30",
+      "ticker": "VIC",
+      "decision_date": "2026-01-20",
+      "action": "BUY",
+      "confidence": null,
+      "rationale": "Buy & Hold — entered on 2026-01-20",
+      "source_path": null
+    },
+    {
+      "strategy_id": "buyhold_vn30",
+      "ticker": "FPT",
+      "decision_date": "2026-01-20",
+      "action": "BUY",
+      "confidence": null,
+      "rationale": "Buy & Hold — entered on 2026-01-20",
+      "source_path": null
+    },
+    {
+      "strategy_id": "buyhold_vn30",
+      "ticker": "MWG",
+      "decision_date": "2026-01-20",
+      "action": "BUY",
+      "confidence": null,
+      "rationale": "Buy & Hold — entered on 2026-01-20",
+      "source_path": null
+    },
+    {
+      "strategy_id": "buyhold_vn30",
+      "ticker": "MBB",
+      "decision_date": "2026-01-20",
+      "action": "BUY",
+      "confidence": null,
+      "rationale": "Buy & Hold — entered on 2026-01-20",
+      "source_path": null
+    },
+    {
+      "strategy_id": "buyhold_vn30",
+      "ticker": "CTG",
+      "decision_date": "2026-01-20",
+      "action": "BUY",
+      "confidence": null,
+      "rationale": "Buy & Hold — entered on 2026-01-20",
+      "source_path": null
+    },
+    {
+      "strategy_id": "buyhold_vn30",
+      "ticker": "BID",
+      "decision_date": "2026-01-20",
+      "action": "BUY",
+      "confidence": null,
+      "rationale": "Buy & Hold — entered on 2026-01-20",
+      "source_path": null
+    },
+    {
+      "strategy_id": "buyhold_vn30",
+      "ticker": "GAS",
+      "decision_date": "2026-01-20",
+      "action": "BUY",
+      "confidence": null,
+      "rationale": "Buy & Hold — entered on 2026-01-20",
+      "source_path": null
+    }
+  ],
+  "execution_log": [
+    {
+      "decision_date": "2026-01-20",
+      "ticker": "VNM",
+      "action": "BUY",
+      "fill_date": "2026-01-21",
+      "status": "filled",
+      "quantity": 1367,
+      "fill_price": 73000.0,
+      "realized_pnl_vnd": 0.0,
+      "note": "bought 1367 @ 73,110 (fee-incl)"
+    },
+    {
+      "decision_date": "2026-01-20",
+      "ticker": "HPG",
+      "action": "BUY",
+      "fill_date": "2026-01-21",
+      "status": "filled",
+      "quantity": 3730,
+      "fill_price": 26660.0,
+      "realized_pnl_vnd": 0.0,
+      "note": "bought 3730 @ 26,700 (fee-incl)"
+    },
+    {
+      "decision_date": "2026-01-20",
+      "ticker": "TCB",
+      "action": "BUY",
+      "fill_date": "2026-01-21",
+      "status": "filled",
+      "quantity": 2774,
+      "fill_price": 35800.0,
+      "realized_pnl_vnd": 0.0,
+      "note": "bought 2774 @ 35,854 (fee-incl)"
+    },
+    {
+      "decision_date": "2026-01-20",
+      "ticker": "VIC",
+      "action": "BUY",
+      "fill_date": "2026-01-21",
+      "status": "filled",
+      "quantity": 624,
+      "fill_price": 159000.0,
+      "realized_pnl_vnd": 0.0,
+      "note": "bought 624 @ 159,238 (fee-incl)"
+    },
+    {
+      "decision_date": "2026-01-20",
+      "ticker": "FPT",
+      "action": "BUY",
+      "fill_date": "2026-01-21",
+      "status": "filled",
+      "quantity": 963,
+      "fill_price": 103200.0,
+      "realized_pnl_vnd": 0.0,
+      "note": "bought 963 @ 103,355 (fee-incl)"
+    },
+    {
+      "decision_date": "2026-01-20",
+      "ticker": "MWG",
+      "action": "BUY",
+      "fill_date": "2026-01-21",
+      "status": "filled",
+      "quantity": 1158,
+      "fill_price": 85900.0,
+      "realized_pnl_vnd": 0.0,
+      "note": "bought 1158 @ 86,029 (fee-incl)"
+    },
+    {
+      "decision_date": "2026-01-20",
+      "ticker": "MBB",
+      "action": "BUY",
+      "fill_date": "2026-01-21",
+      "status": "filled",
+      "quantity": 3643,
+      "fill_price": 27300.0,
+      "realized_pnl_vnd": 0.0,
+      "note": "bought 3643 @ 27,341 (fee-incl)"
+    },
+    {
+      "decision_date": "2026-01-20",
+      "ticker": "CTG",
+      "action": "BUY",
+      "fill_date": "2026-01-21",
+      "status": "filled",
+      "quantity": 2512,
+      "fill_price": 39550.0,
+      "realized_pnl_vnd": 0.0,
+      "note": "bought 2512 @ 39,609 (fee-incl)"
+    },
+    {
+      "decision_date": "2026-01-20",
+      "ticker": "BID",
+      "action": "BUY",
+      "fill_date": "2026-01-21",
+      "status": "filled",
+      "quantity": 1891,
+      "fill_price": 52600.0,
+      "realized_pnl_vnd": 0.0,
+      "note": "bought 1891 @ 52,679 (fee-incl)"
+    },
+    {
+      "decision_date": "2026-01-20",
+      "ticker": "GAS",
+      "action": "BUY",
+      "fill_date": "2026-01-21",
+      "status": "filled",
+      "quantity": 972,
+      "fill_price": 101200.0,
+      "realized_pnl_vnd": 0.0,
+      "note": "bought 972 @ 101,352 (fee-incl)"
+    }
+  ],
+  "final_portfolio": {
+    "strategy_id": "buyhold_vn30",
+    "initial_capital_vnd": 1000000000.0,
+    "cash": 5261827.549999967,
+    "positions": [
+      {
+        "ticker": "VNM",
+        "quantity": 1367,
+        "avg_cost": 73109.5,
+        "opened_date": "2026-01-21",
+        "opened_by_decision_date": "2026-01-20"
+      },
+      {
+        "ticker": "HPG",
+        "quantity": 3730,
+        "avg_cost": 26699.99,
+        "opened_date": "2026-01-21",
+        "opened_by_decision_date": "2026-01-20"
+      },
+      {
+        "ticker": "TCB",
+        "quantity": 2774,
+        "avg_cost": 35853.700000000004,
+        "opened_date": "2026-01-21",
+        "opened_by_decision_date": "2026-01-20"
+      },
+      {
+        "ticker": "VIC",
+        "quantity": 624,
+        "avg_cost": 159238.5,
+        "opened_date": "2026-01-21",
+        "opened_by_decision_date": "2026-01-20"
+      },
+      {
+        "ticker": "FPT",
+        "quantity": 963,
+        "avg_cost": 103354.8,
+        "opened_date": "2026-01-21",
+        "opened_by_decision_date": "2026-01-20"
+      },
+      {
+        "ticker": "MWG",
+        "quantity": 1158,
+        "avg_cost": 86028.85,
+        "opened_date": "2026-01-21",
+        "opened_by_decision_date": "2026-01-20"
+      },
+      {
+        "ticker": "MBB",
+        "quantity": 3643,
+        "avg_cost": 27340.95,
+        "opened_date": "2026-01-21",
+        "opened_by_decision_date": "2026-01-20"
+      },
+      {
+        "ticker": "CTG",
+        "quantity": 2512,
+        "avg_cost": 39609.325000000004,
+        "opened_date": "2026-01-21",
+        "opened_by_decision_date": "2026-01-20"
+      },
+      {
+        "ticker": "BID",
+        "quantity": 1891,
+        "avg_cost": 52678.9,
+        "opened_date": "2026-01-21",
+        "opened_by_decision_date": "2026-01-20"
+      },
+      {
+        "ticker": "GAS",
+        "quantity": 972,
+        "avg_cost": 101351.8,
+        "opened_date": "2026-01-21",
+        "opened_by_decision_date": "2026-01-20"
+      }
+    ],
+    "closed_trades": [],
+    "unsettled_cash": [],
+    "last_advanced_to": "2026-01-21"
+  }
+}
