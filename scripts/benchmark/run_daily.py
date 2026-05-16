@@ -376,12 +376,17 @@ def main(argv: Optional[List[str]] = None) -> int:
 
             # ── Step 4: compose brief ──────────────────────────────
             cache_dir = os.path.join(_REPO_ROOT, "benchmarks", "state", "prices")
-            prices_today = _today_prices(watchlist, cache_dir, run_date)
+            user_portfolio = UserPortfolio.load()
+            # Include user-held tickers in the price lookup so mark-to-market
+            # works even when those tickers are not in the watchlist (the
+            # agent doesn't run on them, but P&L still needs a current
+            # close to compare against the user's entry price).
+            price_tickers = list(set(watchlist) | set(user_portfolio.tickers))
+            prices_today = _today_prices(price_tickers, cache_dir, run_date)
             decisions_today = [
                 d for d in load_decisions(strategy_id="tradingagents", tickers=watchlist)
                 if d.decision_date == run_date
             ]
-            user_portfolio = UserPortfolio.load()
             brief = _render_brief(
                 run_date=run_date,
                 watchlist=watchlist,

@@ -22,6 +22,8 @@ watchlist:
   - CTG   # VietinBank       — Bank (state)
   - BID   # BIDV             — Bank (state)
   - GAS   # PetroVietnam Gas — Energy
+  - FTS   # FPT Securities   — Securities  (added 2026-05-16 per user portfolio)
+  - ACB   # Asia Commercial  — Bank        (added 2026-05-16 per user portfolio)
 
 # Benchmark for alpha computation. VN30 ETF is the cleanest comparable —
 # tracks the same large-cap universe our watchlist samples from.
