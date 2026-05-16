@@ -161,12 +161,51 @@ def get_vendor(category: str, method: str = None) -> str:
     # Fall back to category-level configuration
     return config.get("data_vendors", {}).get(category, "default")
 
+# Soft-failure patterns: many vendor wrappers return an error-prefixed
+# *string* instead of raising (legacy convention, hard to refactor). The
+# router treats these as fallback triggers so a stopped trend_news server
+# or a broken vnstock source doesn't poison the whole call — we keep trying
+# the next vendor, and only surface the last result if every vendor failed.
+import re as _re
+_SOFT_FAIL_PATTERN = _re.compile(
+    r"^\s*("
+    r"vnstock\s+error|"
+    r"trend_news\s+API|"
+    r"(api|connection)\s+error|"
+    r"connection\s+refused|"
+    r"(server|service)\s+(is\s+)?(not\s+)?(currently\s+)?(running|available)|"
+    r"no\s+vendor|"
+    r"error\s+fetching"
+    r")",
+    _re.IGNORECASE,
+)
+
+
+def _looks_like_failure(result) -> bool:
+    """Heuristic: treat known vendor error-strings as soft failures."""
+    if result is None:
+        return True
+    if isinstance(result, str):
+        if not result.strip():
+            return True
+        return bool(_SOFT_FAIL_PATTERN.search(result))
+    return False
+
+
 def route_to_vendor(method: str, *args, **kwargs):
     """Route method calls to appropriate vendor implementation with fallback support.
 
-    Auto-detection: if the first positional arg (ticker/symbol) looks like a VN stock
-    (2-4 uppercase letters, optionally ending in .VN), vnstock is injected at the front
-    of the vendor chain regardless of config.
+    Fallback triggers:
+      - AlphaVantageRateLimitError (explicit rate-limit)
+      - any other exception from the vendor impl
+      - **string return values matching the soft-failure pattern**
+        (vnstock returns "vnstock error fetching news for VIC: ..." on
+        upstream API breaks; trend_news_api returns "...not currently
+        running..." when the server is down)
+
+    Auto-detection: if the first positional arg looks like a VN stock
+    (2-4 uppercase letters, optionally ending in .VN), vnstock is injected
+    at the front of the vendor chain regardless of config.
     """
     category = get_category_for_method(method)
     vendor_config = get_vendor(category, method)
@@ -175,28 +214,42 @@ def route_to_vendor(method: str, *args, **kwargs):
     if method not in VENDOR_METHODS:
         raise ValueError(f"Method '{method}' not supported")
 
-    # Auto-detect VN tickers and prepend vnstock
     if args and isinstance(args[0], str) and is_vn_ticker(args[0]):
         if "vnstock" in VENDOR_METHODS[method] and "vnstock" not in primary_vendors:
             primary_vendors = ["vnstock"] + primary_vendors
 
-    # Build fallback chain: primary vendors first, then remaining available vendors
     all_available_vendors = list(VENDOR_METHODS[method].keys())
     fallback_vendors = primary_vendors.copy()
     for vendor in all_available_vendors:
         if vendor not in fallback_vendors:
             fallback_vendors.append(vendor)
 
+    # Collect every attempt so we can surface a meaningful diagnostic if
+    # every vendor failed (rather than masking the chain with a generic
+    # "no vendor available" error). Last successful-looking result wins.
+    attempts: list[tuple[str, str]] = []
     for vendor in fallback_vendors:
         if vendor not in VENDOR_METHODS[method]:
             continue
-
         vendor_impl = VENDOR_METHODS[method][vendor]
         impl_func = vendor_impl[0] if isinstance(vendor_impl, list) else vendor_impl
 
         try:
-            return impl_func(*args, **kwargs)
-        except AlphaVantageRateLimitError:
-            continue  # Only rate limits trigger fallback
+            result = impl_func(*args, **kwargs)
+        except AlphaVantageRateLimitError as e:
+            attempts.append((vendor, f"rate-limit: {e}"))
+            continue
+        except Exception as e:  # noqa: BLE001 — every exception triggers fallback
+            attempts.append((vendor, f"{type(e).__name__}: {e}"))
+            continue
 
-    raise RuntimeError(f"No available vendor for '{method}'")
+        if _looks_like_failure(result):
+            attempts.append((vendor, f"soft-fail: {str(result)[:120]}"))
+            continue
+        return result
+
+    # No vendor produced data — return a combined diagnostic. We return a
+    # string (not raise) so calling tools see degraded-but-usable output;
+    # the agent prompt instructs them to flag missing data caveats.
+    summary = "; ".join(f"{v}: {msg}" for v, msg in attempts) or "no vendors configured"
+    return f"[{method}] all vendors failed for args={args}: {summary}"

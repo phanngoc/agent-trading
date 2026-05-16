@@ -160,7 +160,11 @@ def _call_trend_news_api(
         params["topics"] = topics
     
     try:
-        response = requests.get(f"{api_url}/query", params=params, timeout=10)
+        # Short timeout so a stopped trend_news server fails fast and the
+        # caller can fall back to vnstock/yfinance without a 10s hang per
+        # call. Use (connect, read) tuple — connect failures on a dead port
+        # are instant; the read budget tolerates slow Vietnamese news APIs.
+        response = requests.get(f"{api_url}/query", params=params, timeout=(2, 5))
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:

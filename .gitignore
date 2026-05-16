@@ -217,3 +217,14 @@ __marimo__/
 
 # Cache
 **/data_cache/
+
+# Dashboard-triggered agent runs (transient stdout/status; the canonical
+# results land in eval_results/<TICKER>/TradingAgentsStrategy_logs/).
+eval_results/_runs/
+eval_results/_daily_runs/
+
+# The `lib/` rule above (Python packaging dir) inadvertently matches the
+# dashboard's TypeScript source dir `dashboard/src/lib/`. Un-ignore that
+# explicitly so the dashboard build doesn't silently lose its utility
+# modules (utils, api-client, format, symbols, yahoo, yfinance, run-logs).
+!dashboard/src/lib/
