@@ -31,7 +31,7 @@ export async function POST(req: Request) {
   }
 
   const date = body.date ?? new Date().toISOString().slice(0, 10)
-  const analysts = body.analysts ?? "market,news"
+  const analysts = body.analysts ?? "market,news,fundamentals"
   const runId = randomUUID()
 
   const repoRoot = path.resolve(process.cwd(), "..")
@@ -69,6 +69,14 @@ export async function POST(req: Request) {
   }
   out.write("\n")
 
+  // Mirror tradingagents/dataflows/vnstock_api.py is_vn_ticker so the
+  // user-facing reports (analyst outputs + final decision) come back in
+  // the same language the dashboard is presented in. Internal agent
+  // debate stays in English regardless — see default_config.py comment
+  // on output_language.
+  const isVnTicker = /^[A-Z]{2,3}(\.VN)?$/.test(ticker.toUpperCase())
+  const outputLanguage = isVnTicker ? "Vietnamese" : "English"
+
   const child = spawn(
     py,
     [
@@ -84,7 +92,11 @@ export async function POST(req: Request) {
     ],
     {
       cwd: repoRoot,
-      env: { ...process.env, PYTHONUNBUFFERED: "1" },
+      env: {
+        ...process.env,
+        PYTHONUNBUFFERED: "1",
+        TRADINGAGENTS_OUTPUT_LANGUAGE: outputLanguage,
+      },
     },
   )
 

@@ -35,6 +35,8 @@ from .baodautu_scraper import (
     BaoDauTuChungKhoanScraper,
     BaoDauTuKinhDoanhScraper,
 )
+from .f319_scraper import F319Scraper
+from .fireant_scraper import FireantScraper
 from .worldmonitor_fetcher import WorldMonitorFetcher, classify_threat, WORLDMONITOR_FEEDS
 
 # Registry of all available Vietnam scrapers
@@ -79,6 +81,10 @@ VIETNAM_SCRAPERS = {
     "baodautu-taichinh": BaoDauTuTaiChinhScraper,
     "baodautu-chungkhoan": BaoDauTuChungKhoanScraper,
     "baodautu-kinhdoanh": BaoDauTuKinhDoanhScraper,
+
+    # Retail social sources — forum + social wall (sentiment signal, not news)
+    "f319": F319Scraper,
+    "fireant": FireantScraper,
 }
 
 __all__ = [
@@ -115,6 +121,9 @@ __all__ = [
     "BaoDauTuTaiChinhScraper",
     "BaoDauTuChungKhoanScraper",
     "BaoDauTuKinhDoanhScraper",
+    # Retail social
+    "F319Scraper",
+    "FireantScraper",
     # Registry
     "VIETNAM_SCRAPERS",
 ]
