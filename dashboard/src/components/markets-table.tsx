@@ -1,5 +1,6 @@
 "use client"
 
+import { useRouter } from "next/navigation"
 import { useState } from "react"
 import { ArrowDownIcon, ArrowUpIcon, ArrowUpDown } from "lucide-react"
 import {
@@ -18,6 +19,7 @@ import type { Quote } from "@/lib/api-client"
 type SortKey = "name" | "price" | "changePercent"
 
 export function MarketsTable({ quotes }: { quotes: Quote[] }) {
+  const router = useRouter()
   const [sortBy, setSortBy] = useState<SortKey>("changePercent")
   const [dir, setDir] = useState<1 | -1>(-1)
 
@@ -60,7 +62,11 @@ export function MarketsTable({ quotes }: { quotes: Quote[] }) {
           {sorted.map((q) => {
             const positive = (q.changePercent ?? 0) >= 0
             return (
-              <TableRow key={q.symbol} className="text-sm">
+              <TableRow
+                key={q.symbol}
+                className="text-sm cursor-pointer hover:bg-accent/40 transition-colors"
+                onClick={() => router.push(`/markets/${encodeURIComponent(q.symbol)}`)}
+              >
                 <TableCell className="font-medium">{q.name}</TableCell>
                 <TableCell className="font-mono text-xs text-muted-foreground">{q.symbol}</TableCell>
                 <TableCell className="text-right tabular">{formatPrice(q.price, q.currency)}</TableCell>
