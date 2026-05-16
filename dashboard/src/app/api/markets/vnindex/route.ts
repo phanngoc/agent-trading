@@ -25,17 +25,25 @@ function fetchVnIndexFromPy(range: string, interval: string): Promise<{
   const days = RANGE_DAYS[range] ?? 35
   const ivl = VNSTOCK_INTERVAL[interval] ?? "1D"
   return new Promise((resolve, reject) => {
+    // vnai's promo banner still lands on stdout occasionally on the
+    // first call of a fresh subprocess (the deprecated Vnstock() helper
+    // banner is gone, but vnai is a separate library that prints its
+    // own "INSIDERS PROGRAM" notice). Stdout here is reserved for the
+    // JSON the Node caller will JSON.parse, so we redirect vnstock's
+    // imports to stderr for the duration of the API call, then restore
+    // stdout for the final json.dumps line.
     const child = spawn(PY, ["-c", `
-import json
+import contextlib, json, sys
 from datetime import datetime, timedelta
-from vnstock import Vnstock
 
 end = datetime.now().strftime("%Y-%m-%d")
 start = (datetime.now() - timedelta(days=${days})).strftime("%Y-%m-%d")
-stock = Vnstock().stock(symbol="VNINDEX", source="VCI")
-h = stock.quote.history(start=start, end=end, interval=${JSON.stringify(ivl)})
-
 out = {"price": None, "change": 0.0, "changePercent": 0.0, "history": []}
+with contextlib.redirect_stdout(sys.stderr):
+    from vnstock.api.quote import Quote
+    quote = Quote(source="VCI", symbol="VNINDEX")
+    h = quote.history(start=start, end=end, interval=${JSON.stringify(ivl)})
+
 if h is not None and not h.empty:
     out["history"] = [
         {"t": str(t), "c": float(c)}

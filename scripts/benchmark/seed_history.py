@@ -47,16 +47,17 @@ def _load_config(path: str) -> dict:
 def _vnstock_fetch(ticker: str, start: str, end: str) -> Optional[pd.DataFrame]:
     """Fetch OHLCV via vnstock with the VCI→KBS fallback already wired in.
 
-    Reuses :func:`tradingagents.dataflows.vnstock_api.get_stock_data`'s
-    underlying logic for parity with what the agent sees, but returns a
-    DataFrame here (rather than a CSV string) so the caller can merge.
+    Reuses :func:`tradingagents.dataflows.vnstock_api._build_quote` so the
+    backfill shares the same source-fallback semantics as the agent. We
+    only need the DataFrame here (callers merge into the cache CSV),
+    so we bypass ``get_stock_data``'s CSV serialization.
     """
-    from tradingagents.dataflows.vnstock_api import _get_stock_obj_with_fallback, clean_symbol
+    from tradingagents.dataflows.vnstock_api import _build_quote, clean_symbol
 
     sym = clean_symbol(ticker)
     try:
-        s = _get_stock_obj_with_fallback(sym)
-        df = s.quote.history(start=start, end=end, interval="1D")
+        quote, _src = _build_quote(sym)
+        df = quote.history(start=start, end=end, interval="1D")
     except Exception as exc:  # noqa: BLE001 — bubble up as None so caller logs
         logger.warning("vnstock fetch failed for %s: %s", sym, exc)
         return None
@@ -82,17 +83,17 @@ def _vnstock_fetch(ticker: str, start: str, end: str) -> Optional[pd.DataFrame]:
 def _vnindex_fetch(start: str, end: str) -> Optional[pd.DataFrame]:
     """Fetch the VN-Index level series via vnstock's index/quote helper.
 
-    vnstock exposes index data through the same Quote interface using the
-    sentinel symbol ``VNINDEX``. We try VCI then KBS — both serve the
-    index, but availability is uneven across upstream outages.
+    vnstock exposes index data through the same ``Quote`` class using
+    the sentinel symbol ``VNINDEX``. We try VCI then KBS — both serve
+    the index, but availability is uneven across upstream outages.
     """
-    from vnstock import Vnstock
+    from vnstock.api.quote import Quote
 
     last_exc: Optional[Exception] = None
     for src in ("VCI", "KBS"):
         try:
-            obj = Vnstock().stock(symbol="VNINDEX", source=src)
-            df = obj.quote.history(start=start, end=end, interval="1D")
+            quote = Quote(source=src, symbol="VNINDEX")
+            df = quote.history(start=start, end=end, interval="1D")
             if df is None or df.empty:
                 continue
             rename = {

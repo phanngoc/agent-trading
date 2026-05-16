@@ -3,6 +3,21 @@ vnstock_api.py — VNStock data provider for Vietnamese stocks (HOSE/HNX/UPCOM).
 
 Drop-in replacement for yfinance methods for VN tickers.
 Exposes the same function signatures used in interface.py VENDOR_METHODS.
+
+Migrated from the legacy ``Vnstock().stock(symbol, source).quote/finance/company``
+helper (deprecated 31/08/2025) to the unified ``vnstock.api.*`` classes:
+``Quote``, ``Company``, ``Finance``. Two practical wins from the move:
+
+* No more multi-line "DEPRECATION NOTICE" banner printed to stdout on every
+  call (the new API stays quiet on this front).
+* Source construction is per-route, so a broken VCI ``Company`` payload
+  no longer cascades into the price route the way the eager
+  ``Vnstock().stock(...)`` helper used to.
+
+vnai's "INSIDERS PROGRAM" promo banner still occasionally lands on stdout
+(separate library, separate concern); callers that pipe output through a
+JSON parser must still redirect stdout to stderr — see the consumers in
+``dashboard/scripts/fetch_quotes.py`` and the dashboard API routes.
 """
 
 import os
@@ -10,7 +25,7 @@ import re
 import pandas as pd
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
-from typing import Annotated
+from typing import Annotated, Callable, TypeVar
 
 from .stockstats_utils import _clean_dataframe
 from .config import get_config
@@ -28,45 +43,30 @@ def clean_symbol(symbol: str) -> str:
     """Strip .VN suffix — vnstock uses bare 3-letter codes."""
     return symbol.upper().replace('.VN', '').strip()
 
-# Source fallback order for company-level data (news, overview, insider_deals).
-# VCI's company endpoint started returning a payload without the 'data' key
-# in late-2026 (KeyError: 'data' on Company.__init__); KBS still serves the
-# same fields.
+
+# Source fallback order. We try VCI first for routes whose VCI endpoint is
+# the more complete one (Finance has a richer schema there), and KBS first
+# for company-metadata routes that have historically broken on VCI
+# (Company endpoint returning a payload without the ``data`` key for some
+# symbols — TCB confirmed 2026-05-16). The price route accepts either.
+_PRICE_SOURCES: tuple[str, ...] = ("VCI", "KBS")
+_FINANCE_SOURCES: tuple[str, ...] = ("VCI", "KBS")
 _COMPANY_SOURCES: tuple[str, ...] = ("KBS", "VCI")
 
-# Source fallback chain used by the price/indicator routes only. VCI
-# stays the default because its ``Finance`` API is the only one whose
-# method signatures match what the fundamentals routes call (KBS's
-# ``Finance`` rejects ``lang='en'`` and 404s on ratio/balance_sheet —
-# so reusing this list for fundamentals would regress every working
-# ticker). KBS is the fallback for tickers like TCB where VCI's
-# ``Company`` payload is malformed and eagerly fails Stock construction.
-_PRICE_SOURCES: tuple[str, ...] = ("VCI", "KBS")
+
+T = TypeVar("T")
 
 
-def _get_stock_obj(symbol: str, source: str = 'VCI'):
-    """Create and return a vnstock Stock object on a specific source."""
-    from vnstock import Vnstock
-    return Vnstock().stock(symbol=clean_symbol(symbol), source=source)
+def _try_sources(builder: Callable[[str], T], sources: tuple[str, ...]) -> tuple[T, str]:
+    """Return ``(object, source_id)`` for the first source the builder accepts.
 
-
-def _get_stock_obj_with_fallback(
-    symbol: str,
-    sources: tuple[str, ...] = _PRICE_SOURCES,
-):
-    """Construct a Stock object, trying each source in order.
-
-    Used by the price / indicator routes where any source's
-    ``quote.history`` works once construction succeeds. Re-raises the
-    last error if every source fails so callers fall through to their
-    existing exception-to-soft-fail path.
+    Re-raises the last exception only if every source fails so callers can
+    surface a meaningful error rather than ``no vendor`` ambiguity.
     """
-    from vnstock import Vnstock
-    sym = clean_symbol(symbol)
     last_err: Exception | None = None
     for src in sources:
         try:
-            return Vnstock().stock(symbol=sym, source=src)
+            return builder(src), src
         except Exception as e:  # noqa: BLE001 — try every source
             last_err = e
             continue
@@ -74,28 +74,26 @@ def _get_stock_obj_with_fallback(
     raise last_err
 
 
-def _get_company_with_fallback(symbol: str):
-    """Yield (source, stock_obj) tuples until Company construction succeeds.
-
-    Constructing ``Vnstock().stock(...)`` eagerly builds the per-source
-    Company helper, so a broken upstream API surfaces here as a KeyError
-    rather than later. The caller iterates and picks the first source that
-    actually returns data.
-    """
-    from vnstock import Vnstock
+def _build_quote(symbol: str, sources: tuple[str, ...] = _PRICE_SOURCES):
+    """Construct a ``Quote`` on the first source whose constructor succeeds."""
+    from vnstock.api.quote import Quote
     sym = clean_symbol(symbol)
-    last_err: Exception | None = None
-    for src in _COMPANY_SOURCES:
-        try:
-            obj = Vnstock().stock(symbol=sym, source=src)
-            # Touch a cheap attribute to force lazy validation paths.
-            _ = obj.company.SUPPORTED_SOURCES if hasattr(obj.company, "SUPPORTED_SOURCES") else None
-            yield src, obj
-        except Exception as e:  # noqa: BLE001 — we want to try every source
-            last_err = e
-            continue
-    if last_err is not None:
-        raise last_err
+    return _try_sources(lambda src: Quote(source=src, symbol=sym), sources)
+
+
+def _build_company(symbol: str, sources: tuple[str, ...] = _COMPANY_SOURCES):
+    """Construct a ``Company`` on the first source whose constructor succeeds."""
+    from vnstock.api.company import Company
+    sym = clean_symbol(symbol)
+    return _try_sources(lambda src: Company(source=src, symbol=sym), sources)
+
+
+def _build_finance(symbol: str, period: str = "quarter",
+                   sources: tuple[str, ...] = _FINANCE_SOURCES):
+    """Construct a ``Finance`` on the first source whose constructor succeeds."""
+    from vnstock.api.financial import Finance
+    sym = clean_symbol(symbol)
+    return _try_sources(lambda src: Finance(source=src, symbol=sym, period=period), sources)
 
 
 # ── Price data ─────────────────────────────────────────────────────────────────
@@ -105,14 +103,14 @@ def get_stock_data(
     start_date: str,
     end_date: str,
 ) -> str:
-    """
-    Fetch OHLCV price history from vnstock (VCI source).
+    """Fetch OHLCV price history from vnstock.
+
     Returns CSV string compatible with yfinance output format.
     """
     sym = clean_symbol(symbol)
     try:
-        s = _get_stock_obj_with_fallback(sym)
-        df = s.quote.history(start=start_date, end=end_date, interval='1D')
+        quote, source = _build_quote(sym)
+        df = quote.history(start=start_date, end=end_date, interval='1D')
     except Exception as e:
         return f"vnstock error fetching price data for {sym}: {e}"
 
@@ -142,7 +140,7 @@ def get_stock_data(
 
     header = f"# VNStock data for {sym} from {start_date} to {end_date}\n"
     header += f"# Total records: {len(df)}\n"
-    header += f"# Source: VCI\n\n"
+    header += f"# Source: {source}\n\n"
     return header + df.to_csv()
 
 
@@ -154,10 +152,7 @@ def get_indicators(
     curr_date: str,
     look_back_days: int = 90,
 ) -> str:
-    """
-    Calculate technical indicators using stockstats on vnstock price data.
-    Mirrors the yfinance get_stock_stats_indicators_window signature.
-    """
+    """Calculate technical indicators using stockstats on vnstock price data."""
     from stockstats import wrap
     from .y_finance import get_stock_stats_indicators_window as _yf_indicators
 
@@ -179,8 +174,8 @@ def get_indicators(
         data = pd.read_csv(cache_file)
     else:
         try:
-            s = _get_stock_obj_with_fallback(sym)
-            df_raw = s.quote.history(start=start_str, end=end_str, interval='1D')
+            quote, _source = _build_quote(sym)
+            df_raw = quote.history(start=start_str, end=end_str, interval='1D')
         except Exception as e:
             return f"vnstock error fetching data for indicators: {e}"
 
@@ -240,35 +235,39 @@ def get_indicators(
 # ── Fundamentals ───────────────────────────────────────────────────────────────
 
 def get_fundamentals(ticker: str, curr_date: str) -> str:
-    """Company overview + key financial ratios."""
-    sym = clean_symbol(ticker)
-    try:
-        s = _get_stock_obj_with_fallback(sym)
-        overview = s.company.overview()
-        # vnstock 3.5.0's KBS Finance returns 404 across the board and
-        # VCI's Stock construction is broken for many symbols, so the
-        # ratio call may fail; collect any error and surface it next to
-        # the overview block rather than abandoning the whole report.
-        ratio = None
-        ratio_error: str | None = None
-        try:
-            ratio = s.finance.ratio(period='quarter')
-        except Exception as e:  # noqa: BLE001 — partial data is better than none
-            ratio_error = f"{type(e).__name__}: {e}"
+    """Company overview + key financial ratios.
 
-        parts = [f"=== Company Overview: {sym} ==="]
+    Splits the data fetch across two API objects since the new
+    ``vnstock.api`` classes are intentionally narrow: ``Company`` for the
+    overview, ``Finance`` for the ratios. Each picks its own source via
+    the fallback helper so a single-vendor outage degrades to partial
+    data instead of an empty report.
+    """
+    sym = clean_symbol(ticker)
+    parts = [f"=== Company Overview: {sym} ==="]
+
+    # ── Overview (Company) ────────────────────────────────────────────
+    try:
+        company, _src = _build_company(sym)
+        overview = company.overview()
         if overview is not None and not overview.empty:
             parts.append(overview.to_string())
+    except Exception as e:  # noqa: BLE001 — surface as inline annotation
+        parts.append(f"<overview unavailable: {type(e).__name__}: {e}>")
 
-        parts.append(f"\n=== Financial Ratios (last 4 quarters) ===")
+    # ── Ratios (Finance) ──────────────────────────────────────────────
+    parts.append("\n=== Financial Ratios (last 4 quarters) ===")
+    try:
+        finance, _src = _build_finance(sym, period="quarter")
+        ratio = finance.ratio()
         if ratio is not None and not ratio.empty:
             parts.append(ratio.tail(4).T.to_string())
-        elif ratio_error:
-            parts.append(f"<vnstock ratio unavailable: {ratio_error}>")
+        else:
+            parts.append("<ratio returned empty>")
+    except Exception as e:  # noqa: BLE001
+        parts.append(f"<ratio unavailable: {type(e).__name__}: {e}>")
 
-        return '\n'.join(parts)
-    except Exception as e:
-        return f"vnstock error fetching fundamentals for {sym}: {e}"
+    return '\n'.join(parts)
 
 
 def get_balance_sheet(ticker: str, freq: str = 'quarterly', curr_date: str = None) -> str:
@@ -276,11 +275,10 @@ def get_balance_sheet(ticker: str, freq: str = 'quarterly', curr_date: str = Non
     sym = clean_symbol(ticker)
     period = 'quarter' if 'quarter' in freq.lower() else 'year'
     try:
-        s = _get_stock_obj_with_fallback(sym)
-        df = s.finance.balance_sheet(period=period)
+        finance, _src = _build_finance(sym, period=period)
+        df = finance.balance_sheet()
         if df is None or df.empty:
             return f"No balance sheet data for {sym}"
-        # Show last 4 periods
         result = df.tail(4).T.to_string()
         return f"=== Balance Sheet ({period}) for {sym} ===\n{result}"
     except Exception as e:
@@ -292,8 +290,8 @@ def get_cashflow(ticker: str, freq: str = 'quarterly', curr_date: str = None) ->
     sym = clean_symbol(ticker)
     period = 'quarter' if 'quarter' in freq.lower() else 'year'
     try:
-        s = _get_stock_obj_with_fallback(sym)
-        df = s.finance.cash_flow(period=period)
+        finance, _src = _build_finance(sym, period=period)
+        df = finance.cash_flow()
         if df is None or df.empty:
             return f"No cash flow data for {sym}"
         result = df.tail(4).T.to_string()
@@ -307,8 +305,8 @@ def get_income_statement(ticker: str, freq: str = 'quarterly', curr_date: str = 
     sym = clean_symbol(ticker)
     period = 'quarter' if 'quarter' in freq.lower() else 'year'
     try:
-        s = _get_stock_obj_with_fallback(sym)
-        df = s.finance.income_statement(period=period)
+        finance, _src = _build_finance(sym, period=period)
+        df = finance.income_statement()
         if df is None or df.empty:
             return f"No income statement data for {sym}"
         result = df.tail(4).T.to_string()
@@ -320,9 +318,11 @@ def get_income_statement(ticker: str, freq: str = 'quarterly', curr_date: str = 
 def get_insider_transactions(ticker: str, curr_date: str = None) -> str:
     """Insider deals / transactions."""
     sym = clean_symbol(ticker)
+    # In the new API the method is called ``insider_trading`` (not
+    # ``insider_deals`` as in the legacy ``stock.company.*`` namespace).
     try:
-        s = _get_stock_obj_with_fallback(sym)
-        df = s.company.insider_deals()
+        company, _src = _build_company(sym)
+        df = company.insider_trading()
         if df is None or df.empty:
             return f"No insider transaction data for {sym}"
         result = df.tail(20).to_string()
@@ -332,12 +332,15 @@ def get_insider_transactions(ticker: str, curr_date: str = None) -> str:
 
 
 def get_news(ticker: str, curr_date: str = None, look_back_days: int = 7) -> str:
-    """Company news from vnstock with source-fallback (KBS → VCI)."""
+    """Company news from vnstock with source-fallback."""
     sym = clean_symbol(ticker)
     errors: list[str] = []
-    for src, s in _get_company_with_fallback(sym):
+    # Try each source explicitly so the diagnostic includes which one(s) failed.
+    from vnstock.api.company import Company
+    for src in _COMPANY_SOURCES:
         try:
-            df = s.company.news()
+            company = Company(source=src, symbol=sym)
+            df = company.news()
             if df is None or df.empty:
                 errors.append(f"{src}: empty")
                 continue
@@ -350,12 +353,14 @@ def get_news(ticker: str, curr_date: str = None, look_back_days: int = 7) -> str
 
 
 def get_insider_transactions_fallback(ticker: str, curr_date: str = None) -> str:
-    """Helper reused by interface — same fallback as get_news."""
+    """Helper reused by interface — same fallback semantics as get_news."""
     sym = clean_symbol(ticker)
     errors: list[str] = []
-    for src, s in _get_company_with_fallback(sym):
+    from vnstock.api.company import Company
+    for src in _COMPANY_SOURCES:
         try:
-            df = s.company.insider_deals()
+            company = Company(source=src, symbol=sym)
+            df = company.insider_trading()
             if df is None or df.empty:
                 errors.append(f"{src}: empty")
                 continue

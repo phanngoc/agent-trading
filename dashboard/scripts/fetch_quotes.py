@@ -109,13 +109,23 @@ def fetch_yf(symbol: str, vendor_symbol: str) -> dict[str, Any]:
 def fetch_vnstock(symbol: str, vendor_symbol: str) -> dict[str, Any]:
     out = _empty(symbol, currency="VND")
     try:
-        from vnstock import Vnstock
+        # vnai's "INSIDERS PROGRAM" promo banner still occasionally lands
+        # on stdout on the first call of a fresh subprocess — independent
+        # of which vnstock API we use. Our stdout is reserved for the
+        # JSON the Node caller will JSON.parse, so we keep the redirect
+        # even after migrating off the deprecated Vnstock().stock(...)
+        # path; the new ``vnstock.api.quote.Quote`` is quieter but not
+        # silent.
+        import contextlib
+        import sys as _sys
         from datetime import datetime, timedelta
 
         end = datetime.now().strftime("%Y-%m-%d")
         start = (datetime.now() - timedelta(days=45)).strftime("%Y-%m-%d")
-        stock = Vnstock().stock(symbol=vendor_symbol, source="VCI")
-        hist = stock.quote.history(start=start, end=end, interval="1D")
+        with contextlib.redirect_stdout(_sys.stderr):
+            from vnstock.api.quote import Quote
+            quote = Quote(source="VCI", symbol=vendor_symbol)
+            hist = quote.history(start=start, end=end, interval="1D")
         if hist is None or hist.empty:
             return out
         # Newest at the end. Build sparkline + last/prev close.
