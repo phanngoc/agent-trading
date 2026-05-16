@@ -1,0 +1,475 @@
+{
+  "strategy_id": "sma_crossover",
+  "kind": "baseline.sma_crossover",
+  "decisions": [
+    {
+      "strategy_id": "sma_crossover",
+      "ticker": "VNM",
+      "decision_date": "2026-04-15",
+      "action": "BUY",
+      "confidence": null,
+      "rationale": "SMA10/30 crossover bullish on 2026-04-15",
+      "source_path": null
+    },
+    {
+      "strategy_id": "sma_crossover",
+      "ticker": "VNM",
+      "decision_date": "2026-05-07",
+      "action": "SELL",
+      "confidence": null,
+      "rationale": "SMA10/30 crossover bearish on 2026-05-07",
+      "source_path": null
+    },
+    {
+      "strategy_id": "sma_crossover",
+      "ticker": "HPG",
+      "decision_date": "2026-03-13",
+      "action": "SELL",
+      "confidence": null,
+      "rationale": "SMA10/30 crossover bearish on 2026-03-13",
+      "source_path": null
+    },
+    {
+      "strategy_id": "sma_crossover",
+      "ticker": "HPG",
+      "decision_date": "2026-04-09",
+      "action": "BUY",
+      "confidence": null,
+      "rationale": "SMA10/30 crossover bullish on 2026-04-09",
+      "source_path": null
+    },
+    {
+      "strategy_id": "sma_crossover",
+      "ticker": "HPG",
+      "decision_date": "2026-05-13",
+      "action": "SELL",
+      "confidence": null,
+      "rationale": "SMA10/30 crossover bearish on 2026-05-13",
+      "source_path": null
+    },
+    {
+      "strategy_id": "sma_crossover",
+      "ticker": "TCB",
+      "decision_date": "2026-04-14",
+      "action": "BUY",
+      "confidence": null,
+      "rationale": "SMA10/30 crossover bullish on 2026-04-14",
+      "source_path": null
+    },
+    {
+      "strategy_id": "sma_crossover",
+      "ticker": "VIC",
+      "decision_date": "2026-03-18",
+      "action": "SELL",
+      "confidence": null,
+      "rationale": "SMA10/30 crossover bearish on 2026-03-18",
+      "source_path": null
+    },
+    {
+      "strategy_id": "sma_crossover",
+      "ticker": "VIC",
+      "decision_date": "2026-04-13",
+      "action": "BUY",
+      "confidence": null,
+      "rationale": "SMA10/30 crossover bullish on 2026-04-13",
+      "source_path": null
+    },
+    {
+      "strategy_id": "sma_crossover",
+      "ticker": "FPT",
+      "decision_date": "2026-04-20",
+      "action": "BUY",
+      "confidence": null,
+      "rationale": "SMA10/30 crossover bullish on 2026-04-20",
+      "source_path": null
+    },
+    {
+      "strategy_id": "sma_crossover",
+      "ticker": "FPT",
+      "decision_date": "2026-04-23",
+      "action": "SELL",
+      "confidence": null,
+      "rationale": "SMA10/30 crossover bearish on 2026-04-23",
+      "source_path": null
+    },
+    {
+      "strategy_id": "sma_crossover",
+      "ticker": "MWG",
+      "decision_date": "2026-04-17",
+      "action": "BUY",
+      "confidence": null,
+      "rationale": "SMA10/30 crossover bullish on 2026-04-17",
+      "source_path": null
+    },
+    {
+      "strategy_id": "sma_crossover",
+      "ticker": "MBB",
+      "decision_date": "2026-03-10",
+      "action": "SELL",
+      "confidence": null,
+      "rationale": "SMA10/30 crossover bearish on 2026-03-10",
+      "source_path": null
+    },
+    {
+      "strategy_id": "sma_crossover",
+      "ticker": "MBB",
+      "decision_date": "2026-04-13",
+      "action": "BUY",
+      "confidence": null,
+      "rationale": "SMA10/30 crossover bullish on 2026-04-13",
+      "source_path": null
+    },
+    {
+      "strategy_id": "sma_crossover",
+      "ticker": "MBB",
+      "decision_date": "2026-05-07",
+      "action": "SELL",
+      "confidence": null,
+      "rationale": "SMA10/30 crossover bearish on 2026-05-07",
+      "source_path": null
+    },
+    {
+      "strategy_id": "sma_crossover",
+      "ticker": "CTG",
+      "decision_date": "2026-04-14",
+      "action": "BUY",
+      "confidence": null,
+      "rationale": "SMA10/30 crossover bullish on 2026-04-14",
+      "source_path": null
+    },
+    {
+      "strategy_id": "sma_crossover",
+      "ticker": "BID",
+      "decision_date": "2026-04-17",
+      "action": "BUY",
+      "confidence": null,
+      "rationale": "SMA10/30 crossover bullish on 2026-04-17",
+      "source_path": null
+    },
+    {
+      "strategy_id": "sma_crossover",
+      "ticker": "GAS",
+      "decision_date": "2026-03-13",
+      "action": "SELL",
+      "confidence": null,
+      "rationale": "SMA10/30 crossover bearish on 2026-03-13",
+      "source_path": null
+    },
+    {
+      "strategy_id": "sma_crossover",
+      "ticker": "GAS",
+      "decision_date": "2026-05-15",
+      "action": "BUY",
+      "confidence": null,
+      "rationale": "SMA10/30 crossover bullish on 2026-05-15",
+      "source_path": null
+    }
+  ],
+  "execution_log": [
+    {
+      "decision_date": "2026-03-10",
+      "ticker": "MBB",
+      "action": "SELL",
+      "fill_date": "2026-03-11",
+      "status": "skipped_no_position",
+      "quantity": 0,
+      "fill_price": 0.0,
+      "realized_pnl_vnd": 0.0,
+      "note": null
+    },
+    {
+      "decision_date": "2026-03-13",
+      "ticker": "HPG",
+      "action": "SELL",
+      "fill_date": "2026-03-16",
+      "status": "skipped_no_position",
+      "quantity": 0,
+      "fill_price": 0.0,
+      "realized_pnl_vnd": 0.0,
+      "note": null
+    },
+    {
+      "decision_date": "2026-03-13",
+      "ticker": "GAS",
+      "action": "SELL",
+      "fill_date": "2026-03-16",
+      "status": "skipped_no_position",
+      "quantity": 0,
+      "fill_price": 0.0,
+      "realized_pnl_vnd": 0.0,
+      "note": null
+    },
+    {
+      "decision_date": "2026-03-18",
+      "ticker": "VIC",
+      "action": "SELL",
+      "fill_date": "2026-03-19",
+      "status": "skipped_no_position",
+      "quantity": 0,
+      "fill_price": 0.0,
+      "realized_pnl_vnd": 0.0,
+      "note": null
+    },
+    {
+      "decision_date": "2026-04-09",
+      "ticker": "HPG",
+      "action": "BUY",
+      "fill_date": "2026-04-10",
+      "status": "filled",
+      "quantity": 3554,
+      "fill_price": 28090.0,
+      "realized_pnl_vnd": 0.0,
+      "note": "bought 3554 @ 28,132 (fee-incl)"
+    },
+    {
+      "decision_date": "2026-04-13",
+      "ticker": "VIC",
+      "action": "BUY",
+      "fill_date": "2026-04-14",
+      "status": "filled",
+      "quantity": 616,
+      "fill_price": 162000.0,
+      "realized_pnl_vnd": 0.0,
+      "note": "bought 616 @ 162,243 (fee-incl)"
+    },
+    {
+      "decision_date": "2026-04-13",
+      "ticker": "MBB",
+      "action": "BUY",
+      "fill_date": "2026-04-14",
+      "status": "filled",
+      "quantity": 3745,
+      "fill_price": 26700.0,
+      "realized_pnl_vnd": 0.0,
+      "note": "bought 3745 @ 26,740 (fee-incl)"
+    },
+    {
+      "decision_date": "2026-04-14",
+      "ticker": "TCB",
+      "action": "BUY",
+      "fill_date": "2026-04-15",
+      "status": "filled",
+      "quantity": 3101,
+      "fill_price": 32400.0,
+      "realized_pnl_vnd": 0.0,
+      "note": "bought 3101 @ 32,449 (fee-incl)"
+    },
+    {
+      "decision_date": "2026-04-14",
+      "ticker": "CTG",
+      "action": "BUY",
+      "fill_date": "2026-04-15",
+      "status": "filled",
+      "quantity": 2849,
+      "fill_price": 35200.0,
+      "realized_pnl_vnd": 0.0,
+      "note": "bought 2849 @ 35,253 (fee-incl)"
+    },
+    {
+      "decision_date": "2026-04-15",
+      "ticker": "VNM",
+      "action": "BUY",
+      "fill_date": "2026-04-16",
+      "status": "filled",
+      "quantity": 1638,
+      "fill_price": 61500.0,
+      "realized_pnl_vnd": 0.0,
+      "note": "bought 1638 @ 61,592 (fee-incl)"
+    },
+    {
+      "decision_date": "2026-04-17",
+      "ticker": "MWG",
+      "action": "BUY",
+      "fill_date": "2026-04-20",
+      "status": "filled",
+      "quantity": 1158,
+      "fill_price": 87500.0,
+      "realized_pnl_vnd": 0.0,
+      "note": "bought 1158 @ 87,631 (fee-incl)"
+    },
+    {
+      "decision_date": "2026-04-17",
+      "ticker": "BID",
+      "action": "BUY",
+      "fill_date": "2026-04-20",
+      "status": "filled",
+      "quantity": 2505,
+      "fill_price": 40450.0,
+      "realized_pnl_vnd": 0.0,
+      "note": "bought 2505 @ 40,511 (fee-incl)"
+    },
+    {
+      "decision_date": "2026-04-20",
+      "ticker": "FPT",
+      "action": "BUY",
+      "fill_date": "2026-04-21",
+      "status": "filled",
+      "quantity": 1315,
+      "fill_price": 77000.0,
+      "realized_pnl_vnd": 0.0,
+      "note": "bought 1315 @ 77,116 (fee-incl)"
+    },
+    {
+      "decision_date": "2026-04-23",
+      "ticker": "FPT",
+      "action": "SELL",
+      "fill_date": "2026-04-24",
+      "status": "filled",
+      "quantity": 1315,
+      "fill_price": 74000.0,
+      "realized_pnl_vnd": -4340157.5,
+      "note": "sold 1315 @ 73,815 (settles 2026-05-04)"
+    },
+    {
+      "decision_date": "2026-05-07",
+      "ticker": "VNM",
+      "action": "SELL",
+      "fill_date": "2026-05-08",
+      "status": "filled",
+      "quantity": 1638,
+      "fill_price": 61800.0,
+      "realized_pnl_vnd": 87223.5,
+      "note": "sold 1638 @ 61,646 (settles 2026-05-13)"
+    },
+    {
+      "decision_date": "2026-05-07",
+      "ticker": "MBB",
+      "action": "SELL",
+      "fill_date": "2026-05-08",
+      "status": "filled",
+      "quantity": 3745,
+      "fill_price": 26100.0,
+      "realized_pnl_vnd": -2641348.5000000107,
+      "note": "sold 3745 @ 26,035 (settles 2026-05-13)"
+    },
+    {
+      "decision_date": "2026-05-13",
+      "ticker": "HPG",
+      "action": "SELL",
+      "fill_date": "2026-05-14",
+      "status": "filled",
+      "quantity": 3554,
+      "fill_price": 27300.0,
+      "realized_pnl_vnd": -3199968.290000007,
+      "note": "sold 3554 @ 27,232 (settles 2026-05-15)"
+    },
+    {
+      "decision_date": "2026-05-15",
+      "ticker": "GAS",
+      "action": "BUY",
+      "fill_date": null,
+      "status": "skipped_holiday",
+      "quantity": 0,
+      "fill_price": 0.0,
+      "realized_pnl_vnd": 0.0,
+      "note": null
+    }
+  ],
+  "final_portfolio": {
+    "strategy_id": "sma_crossover",
+    "initial_capital_vnd": 1000000000.0,
+    "cash": 389167857.535,
+    "positions": [
+      {
+        "ticker": "VIC",
+        "quantity": 616,
+        "avg_cost": 162243.0,
+        "opened_date": "2026-04-14",
+        "opened_by_decision_date": "2026-04-13"
+      },
+      {
+        "ticker": "TCB",
+        "quantity": 3101,
+        "avg_cost": 32448.600000000002,
+        "opened_date": "2026-04-15",
+        "opened_by_decision_date": "2026-04-14"
+      },
+      {
+        "ticker": "CTG",
+        "quantity": 2849,
+        "avg_cost": 35252.8,
+        "opened_date": "2026-04-15",
+        "opened_by_decision_date": "2026-04-14"
+      },
+      {
+        "ticker": "MWG",
+        "quantity": 1158,
+        "avg_cost": 87631.25,
+        "opened_date": "2026-04-20",
+        "opened_by_decision_date": "2026-04-17"
+      },
+      {
+        "ticker": "BID",
+        "quantity": 2505,
+        "avg_cost": 40510.675,
+        "opened_date": "2026-04-20",
+        "opened_by_decision_date": "2026-04-17"
+      }
+    ],
+    "closed_trades": [
+      {
+        "ticker": "FPT",
+        "quantity": 1315,
+        "entry_date": "2026-04-21",
+        "entry_price": 77115.5,
+        "exit_date": "2026-04-24",
+        "exit_price": 73815.0,
+        "decision_strategy_id": "sma_crossover",
+        "entry_decision_date": "2026-04-20",
+        "exit_decision_date": "2026-04-23",
+        "realized_pnl_vnd": -4340157.5,
+        "realized_return_pct": -0.04279943720782464,
+        "holding_days": 3
+      },
+      {
+        "ticker": "VNM",
+        "quantity": 1638,
+        "entry_date": "2026-04-16",
+        "entry_price": 61592.25,
+        "exit_date": "2026-05-08",
+        "exit_price": 61645.5,
+        "decision_strategy_id": "sma_crossover",
+        "entry_decision_date": "2026-04-15",
+        "exit_decision_date": "2026-05-07",
+        "realized_pnl_vnd": 87223.5,
+        "realized_return_pct": 0.0008645568233016654,
+        "holding_days": 22
+      },
+      {
+        "ticker": "MBB",
+        "quantity": 3745,
+        "entry_date": "2026-04-14",
+        "entry_price": 26740.050000000003,
+        "exit_date": "2026-05-08",
+        "exit_price": 26034.75,
+        "decision_strategy_id": "sma_crossover",
+        "entry_decision_date": "2026-04-13",
+        "exit_decision_date": "2026-05-07",
+        "realized_pnl_vnd": -2641348.5000000107,
+        "realized_return_pct": -0.026376166087946795,
+        "holding_days": 24
+      },
+      {
+        "ticker": "HPG",
+        "quantity": 3554,
+        "entry_date": "2026-04-10",
+        "entry_price": 28132.135000000002,
+        "exit_date": "2026-05-14",
+        "exit_price": 27231.75,
+        "decision_strategy_id": "sma_crossover",
+        "entry_decision_date": "2026-04-09",
+        "exit_decision_date": "2026-05-13",
+        "realized_pnl_vnd": -3199968.290000007,
+        "realized_return_pct": -0.03200556943154165,
+        "holding_days": 34
+      }
+    ],
+    "unsettled_cash": [
+      {
+        "amount_vnd": 96781639.5,
+        "available_on": "2026-05-15"
+      }
+    ],
+    "last_advanced_to": "2026-05-14"
+  }
+}
